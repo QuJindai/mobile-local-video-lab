@@ -14,8 +14,8 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Locale;
 
 public final class DepthRuntimeBundle {
-    public static final String ASSET = "models/depth-anything-v2/model_int8.onnx";
-    public static final String SHA256 = "01aa7a23de3f4a0ee1a2bb9997e6918104c85a9f95dea46d27b9b3fb0c6b9001";
+    public static final String ASSET = "models/depth-anything-v2/model_q4.onnx";
+    public static final String SHA256 = "5d55b02762e1907589158af3e366bd61ddf648155852a07bbf5e3a074639fcf8";
 
     private final File model;
 
@@ -36,13 +36,13 @@ public final class DepthRuntimeBundle {
     }
 
     public static DepthRuntimeBundle installAndVerify(Context context) throws IOException {
-        File root = new File(context.getFilesDir(), "runtime/depth-anything-v2-int8");
-        File model = new File(root, "model_int8.onnx");
+        File root = new File(context.getFilesDir(), "runtime/depth-anything-v2-q4");
+        File model = new File(root, "model_q4.onnx");
         if (!root.exists() && !root.mkdirs()) {
             throw new IOException("cannot create Depth Anything runtime directory");
         }
         if (!model.isFile() || !SHA256.equals(sha256(model))) {
-            File temp = new File(root, "model_int8.onnx.tmp");
+            File temp = new File(root, "model_q4.onnx.tmp");
             copyAsset(context, temp);
             String digest = sha256(temp);
             if (!SHA256.equals(digest)) {
