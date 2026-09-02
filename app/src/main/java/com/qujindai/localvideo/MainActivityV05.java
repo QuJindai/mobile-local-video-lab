@@ -149,7 +149,7 @@ public final class MainActivityV05 extends Activity {
 
         TextView subtitle = text(
                 "完全离线 · 三后端工作台\n"
-                        + "RIFE 已验收 · Depth Anything V2 + RIFE 真实估深 3D · MobileI2V 语义 I2V 部署中",
+                        + "RIFE 已验收 · Depth Anything V2 Q4 + RIFE 真实估深 3D · MobileI2V 语义 I2V 部署中",
                 14, false);
         subtitle.setTextColor(COLOR_MUTED);
         root.addView(subtitle);
@@ -205,7 +205,7 @@ public final class MainActivityV05 extends Activity {
         card.addView(label("生成后端"));
         backendSpinner = spinner(new String[] {
                 "RIFE Motion · 稳定已验收",
-                "Depth 3D Motion · Depth Anything V2 + RIFE",
+                "Depth 3D Motion · Depth Anything V2 Q4 + RIFE",
                 "MobileI2V 0.27B · 语义 I2V 部署实验"
         }, 1);
         card.addView(backendSpinner);
@@ -214,7 +214,7 @@ public final class MainActivityV05 extends Activity {
         card.addView(backendStatusView);
 
         TextView depthDescription = text(
-                "Depth 3D 会先用 Depth Anything V2 INT8 在手机本地估深，再按深度构造分层视差端点，"
+                "Depth 3D 会先用 Depth Anything V2 Q4 在手机本地估深，再按深度构造分层视差端点，"
                         + "最后由 RIFE 生成连续中间帧。它是真实第二模型链路，但不是扩散式语义 I2V。",
                 12, false);
         depthDescription.setTextColor(COLOR_MUTED);
@@ -646,7 +646,7 @@ public final class MainActivityV05 extends Activity {
 
         String runtime = onnxStatus == null ? "ONNX Runtime: 未探测" : onnxStatus.message;
         deviceView.setText((capabilities == null ? "设备能力：未探测" : capabilities.summary())
-                + "\nDepth Anything V2 INT8 asset: "
+                + "\nDepth Anything V2 Q4 asset: "
                 + (DepthRuntimeBundle.isPackaged(this) ? "PACKAGED" : "MISSING")
                 + "\n" + runtime);
     }
@@ -672,7 +672,7 @@ public final class MainActivityV05 extends Activity {
             modeLabel.setText(secondaryUri == null ? "RIFE · 单图运动" : "RIFE · 双图神经插值");
             generateButton.setText(phase == UiStatePolicy.Phase.GENERATING ? "RIFE 生成中…" : "开始 RIFE 本地生成");
         } else if (depth) {
-            modeLabel.setText("Depth Anything V2 + RIFE · 深度 3D 运动");
+            modeLabel.setText("Depth Anything V2 Q4 + RIFE · 深度 3D 运动");
             generateButton.setText(phase == UiStatePolicy.Phase.GENERATING ? "Depth 3D 生成中…" : "开始 Depth 3D 本地生成");
         } else {
             modeLabel.setText("MobileI2V · 单图语义 I2V");
