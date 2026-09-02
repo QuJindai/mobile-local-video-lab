@@ -36,26 +36,26 @@ jobs:
           cd tools/mobilei2v
           python3 test_model_pack.py
 
-      - name: Fetch pinned Depth Anything V2 INT8 model
+      - name: Fetch pinned Depth Anything V2 Q4 model
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p app/src/main/assets/models/depth-anything-v2
           curl --fail --location --retry 4 --retry-delay 2 \
-            -o app/src/main/assets/models/depth-anything-v2/model_int8.onnx \
-            'https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model_int8.onnx?download=true'
-          echo '01aa7a23de3f4a0ee1a2bb9997e6918104c85a9f95dea46d27b9b3fb0c6b9001  app/src/main/assets/models/depth-anything-v2/model_int8.onnx' \
+            -o app/src/main/assets/models/depth-anything-v2/model_q4.onnx \
+            'https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model_q4.onnx?download=true'
+          echo '5d55b02762e1907589158af3e366bd61ddf648155852a07bbf5e3a074639fcf8  app/src/main/assets/models/depth-anything-v2/model_q4.onnx' \
             | sha256sum -c -
-          ls -lh app/src/main/assets/models/depth-anything-v2/model_int8.onnx
+          ls -lh app/src/main/assets/models/depth-anything-v2/model_q4.onnx
 
-      - name: Host-smoke Depth Anything V2 ONNX graph
+      - name: Host-smoke Depth Anything V2 Q4 ONNX graph
         shell: bash
         run: |
           python3 -m pip install --disable-pip-version-check --quiet 'onnxruntime==1.23.2' numpy
           python3 - <<'PY'
           import numpy as np
           import onnxruntime as ort
-          path='app/src/main/assets/models/depth-anything-v2/model_int8.onnx'
+          path='app/src/main/assets/models/depth-anything-v2/model_q4.onnx'
           session=ort.InferenceSession(path, providers=['CPUExecutionProvider'])
           inputs=session.get_inputs()
           outputs=session.get_outputs()
@@ -68,7 +68,7 @@ jobs:
           print('smoke output', y.shape, y.dtype, float(np.nanmin(y)), float(np.nanmax(y)))
           if y.size != 518*518 or not np.isfinite(y).all():
               raise SystemExit('Depth Anything host smoke failed')
-          print('Depth Anything V2 host smoke PASS')
+          print('Depth Anything V2 Q4 host smoke PASS')
           PY
 
       - name: Set up Android SDK
@@ -126,11 +126,11 @@ jobs:
           test -s "$APK"
           unzip -l "$APK" | grep 'lib/arm64-v8a/librife.so'
           unzip -l "$APK" | grep 'assets/models/rife-v4.6/flownet.bin'
-          unzip -l "$APK" | grep 'assets/models/depth-anything-v2/model_int8.onnx'
+          unzip -l "$APK" | grep 'assets/models/depth-anything-v2/model_q4.onnx'
           unzip -l "$APK" | grep 'lib/arm64-v8a/libonnxruntime.so'
           unzip -l "$APK" | grep 'lib/arm64-v8a/libonnxruntime4j_jni.so'
-          test "$(unzip -p "$APK" assets/models/depth-anything-v2/model_int8.onnx | sha256sum | awk '{print $1}')" \
-            = '01aa7a23de3f4a0ee1a2bb9997e6918104c85a9f95dea46d27b9b3fb0c6b9001'
+          test "$(unzip -p "$APK" assets/models/depth-anything-v2/model_q4.onnx | sha256sum | awk '{print $1}')" \
+            = '5d55b02762e1907589158af3e366bd61ddf648155852a07bbf5e3a074639fcf8'
 
           "$ANDROID_SDK_ROOT/build-tools/35.0.0/aapt" dump badging "$APK" | tee apk-badging.txt
           grep "versionCode='5'" apk-badging.txt
