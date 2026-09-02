@@ -1,30 +1,56 @@
 # Mobile Local Video Lab
 
-Android/Snapdragon local-video experiments for fully offline neural video generation.
+Android/Snapdragon experiments for fully offline neural video generation.
 
-## V0.3 milestone
+## V0.4 milestone
 
-V0.3 keeps the validated RIFE v4.6 / ncnn / Vulkan offline generation core and focuses on the remaining handset UX defects found during S24U acceptance.
+V0.3 is the S24U-validated RIFE baseline. V0.4 turns that single-backend app into a **pluggable local-video model workbench** so semantic I2V models can be installed and evolved without rewriting the handset UX/export pipeline.
 
-### Local generation modes
+### Backends
 
-- **Single image → motion clip**: choose Cinematic Auto, Push In, Pan Left, or Drift Up; the app constructs the motion endpoint locally and RIFE generates neural intermediate frames.
-- **Two images → interpolation clip**: uses RIFE directly between two user-selected images.
+- **RIFE Motion — READY / handset validated**: single-image camera-motion clips and two-image neural interpolation using RIFE v4.6 / ncnn / Vulkan. This remains the built-in safe fallback and continues to export H.264 MP4 to `Movies/LocalVideoLab`.
+- **MobileI2V 0.27B — deployment track**: a separate semantic image-to-video backend based on `hustvl/MobileI2V`. V0.4 introduces its external model-pack, compatibility and ONNX Runtime foundations. The app does **not** call RIFE when MobileI2V is selected and does not claim semantic generation until a genuine MobileI2V execution runtime passes all readiness gates.
 
-### V0.3 handset workflow
+### Model Lab
 
-- Replaces the vendor-sensitive embedded `VideoView` result surface with a real MP4 thumbnail extracted by `MediaMetadataRetriever`; tapping the thumbnail hands playback to the system video player.
-- Result cards show timestamp, duration, resolution, frame count, and FPS.
-- The last five generated results persist across restarts and now render as visual thumbnail rows with metadata.
-- V0.2 URI-only history migrates automatically to the V0.3 metadata record format.
-- Dynamic single/two-image mode UI, 9/17-frame and 6/8/12-FPS presets, open/share actions, and exportable diagnostics remain available.
-- H.264 MP4 encoding writes `YUV_420_888` `Image` planes using each codec plane's row/pixel stride, preserving the vendor-encoder compatibility fix validated on the handset.
-- Output is published to `Movies/LocalVideoLab`.
+The V0.4 Android UI exposes backend selection, handset capability information and MobileI2V pack management. MobileI2V artifacts are installed as a versioned `.mlvpkg` in app-private storage instead of inflating the APK by roughly a gigabyte or more.
+
+The `local-video-model-pack-v1` installer:
+
+- copies the selected pack through a streaming path rather than loading it into the Java heap;
+- rejects absolute paths and ZIP/path traversal;
+- validates a versioned manifest and per-artifact SHA-256 values;
+- checks available private storage before expansion;
+- extracts only declared artifacts;
+- activates a verified version atomically and restores the prior version on activation failure;
+- stores source commit and code/weights license metadata alongside the installed artifacts.
+
+### MobileI2V deployment baseline
+
+V0.4 pins:
+
+- upstream source `hustvl/MobileI2V` commit `8d0a253c766b05a43ba408baf5e8f800a36be8b4`;
+- architecture `Mobiledit_300M_P1_D16`;
+- public `hybrid_371.pth` checkpoint identity and SHA-256;
+- native research target `1280×720×17`;
+- ONNX Runtime Android `1.29.0` as the first generic Android execution foundation.
+
+The official public repository provides PyTorch/CUDA inference and a mobile demonstration but not a reusable Android runtime implementation. Therefore V0.4 keeps `MobileI2V runtime pending` as a visible state until exported graphs and the actual Android execution loop are proven. See `docs/V0.4_MODEL_BACKEND_PLAN.md` and `tools/mobilei2v/`.
+
+### RIFE handset workflow retained
+
+- Cinematic Auto, Push In, Pan Left and Drift Up single-image motion presets.
+- Two-image interpolation.
+- 9/17 frame and 6/8/12 FPS presets.
+- Vendor-safe H.264 input through `YUV_420_888` plane row/pixel strides.
+- Real MP4 thumbnails, system full-screen playback and sharing.
+- Last five results persist with thumbnails and metadata.
+- Exportable diagnostics, thermal and memory telemetry.
 
 ### Build/runtime gates
 
-GitHub Actions builds the arm64 RIFE/ncnn/Vulkan runtime from pinned upstream revisions, packages RIFE v4.6 weights, runs JVM tests, checks 16 KB ELF segment alignment, validates APK version/runtime payload/stable signing identity, and uploads an installable APK.
+GitHub Actions now gates both the stable and evolving layers: deterministic model-pack build/tamper tests, JVM contracts for model-pack parsing/path safety/backend routing, the existing RIFE/ncnn/Vulkan build, 16 KB ELF compatibility, V0.4 APK version and stable signing identity, and packaged ONNX Runtime arm64 libraries.
 
-V0.2 established the **stable development signing baseline** and V0.3 keeps the same certificate, so V0.2+ test builds can overwrite one another. The development signing key is intentionally public in this open-source laboratory repository and must not be reused for production distribution or security-sensitive applications.
+The V0.2+ stable development certificate is retained, so later laboratory APKs can overwrite the validated V0.3 install. The development key is public by design for this open-source laboratory repository and must not be used as a production signing identity.
 
-All inference and MP4 encoding run on-device with no cloud API. This RIFE milestone is deliberately described as neural interpolation/motion generation rather than diffusion or semantic text-to-video; MobileI2V/QNN remains a later model-backend evolution path.
+See `THIRD_PARTY_NOTICES.md` for source/model/runtime attribution boundaries.
