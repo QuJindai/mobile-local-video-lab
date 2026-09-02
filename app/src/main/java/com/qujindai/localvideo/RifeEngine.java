@@ -31,8 +31,10 @@ public final class RifeEngine {
         public final int fps;
         public final long elapsedMs;
         public final boolean singleImageMode;
+        public final MotionSpec.Preset motionPreset;
 
-        Result(Uri uri, GenerationPlan plan, long elapsedMs, boolean singleImageMode) {
+        Result(Uri uri, GenerationPlan plan, long elapsedMs, boolean singleImageMode,
+               MotionSpec.Preset motionPreset) {
             this.uri = uri;
             this.frames = plan.getFrames();
             this.width = plan.getWidth();
@@ -40,6 +42,7 @@ public final class RifeEngine {
             this.fps = plan.getFps();
             this.elapsedMs = elapsedMs;
             this.singleImageMode = singleImageMode;
+            this.motionPreset = motionPreset;
         }
     }
 
@@ -51,6 +54,13 @@ public final class RifeEngine {
 
     public Result generate(Uri primaryUri, Uri secondaryUri, int frameCount, int fps,
                            ProgressListener listener) throws Exception {
+        return generate(primaryUri, secondaryUri, frameCount, fps,
+                MotionSpec.Preset.CINEMATIC_AUTO, listener);
+    }
+
+    public Result generate(Uri primaryUri, Uri secondaryUri, int frameCount, int fps,
+                           MotionSpec.Preset motionPreset,
+                           ProgressListener listener) throws Exception {
         long started = SystemClock.elapsedRealtime();
         progress(listener, 2, "校验本地 RIFE/ncnn/Vulkan 运行时");
         RuntimeBundle runtime = RuntimeBundle.installAndVerify(context);
@@ -59,6 +69,8 @@ public final class RifeEngine {
         Bitmap primary = ImagePrep.loadScaled(context.getContentResolver(), primaryUri);
         Bitmap secondary = null;
         boolean singleImageMode = secondaryUri == null;
+        if (motionPreset == null) motionPreset = MotionSpec.Preset.CINEMATIC_AUTO;
+        final MotionSpec.Preset selectedPreset = motionPreset;
         File jobDir = new File(context.getCacheDir(), "rife-job-" + SystemClock.elapsedRealtime());
         try {
             if (secondaryUri != null) {
@@ -70,7 +82,7 @@ public final class RifeEngine {
                     secondary = decoded;
                 }
             } else {
-                secondary = MotionEndpoint.create(primary);
+                secondary = MotionEndpoint.create(primary, selectedPreset);
             }
 
             GenerationPlan plan = new GenerationPlan(
@@ -84,7 +96,7 @@ public final class RifeEngine {
             ImagePrep.writePng(secondary, new File(inputDir, "00000002.png"));
 
             progress(listener, 12, singleImageMode
-                    ? "已构造本地运动端点，启动 RIFE 神经插帧"
+                    ? "已构造运动端点，启动 RIFE 神经插帧"
                     : "启动 RIFE 双图神经插帧");
             List<String> command = RifeCommand.build(
                     runtime.getExecutable().getAbsolutePath(),
@@ -136,7 +148,8 @@ public final class RifeEngine {
             Uri uri = MediaStorePublisher.publish(context, mp4,
                     "local_video_" + timestamp + ".mp4");
             progress(listener, 100, "完成");
-            return new Result(uri, plan, SystemClock.elapsedRealtime() - started, singleImageMode);
+            return new Result(uri, plan, SystemClock.elapsedRealtime() - started,
+                    singleImageMode, selectedPreset);
         } finally {
             if (secondary != null && !secondary.isRecycled()) secondary.recycle();
             if (!primary.isRecycled()) primary.recycle();
