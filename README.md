@@ -24,6 +24,8 @@ V0.2 packages the open-source RIFE v4.6 / ncnn / Vulkan inference core into an i
 
 ### Build/runtime gates
 
-GitHub Actions builds the arm64 RIFE/ncnn/Vulkan runtime from pinned upstream revisions, packages RIFE v4.6 weights, runs JVM tests, checks 16 KB ELF segment alignment, validates APK version/runtime payload, and uploads an installable debug APK.
+GitHub Actions builds the arm64 RIFE/ncnn/Vulkan runtime from pinned upstream revisions, packages RIFE v4.6 weights, runs JVM tests, checks 16 KB ELF segment alignment, validates APK version/runtime payload/signing identity, and uploads an installable APK.
+
+V0.2 also establishes a **stable development signing baseline** so V0.2 and later test builds can overwrite one another. The development signing key is intentionally public in this open-source laboratory repository and must not be reused for production distribution or security-sensitive applications. V0.1 used an ephemeral CI debug key, so V0.1 → V0.2 is the one expected signing transition.
 
 All inference and MP4 encoding run on-device with no cloud API. This RIFE milestone is deliberately described as neural interpolation/motion generation rather than diffusion or semantic text-to-video; MobileI2V/QNN remains a later model-backend evolution path.
