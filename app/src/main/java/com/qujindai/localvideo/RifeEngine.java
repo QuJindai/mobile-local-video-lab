@@ -112,7 +112,7 @@ public final class RifeEngine {
         long started = SystemClock.elapsedRealtime();
         progress(listener, 2, "校验 RIFE/ncnn/Vulkan 运行时");
         RuntimeBundle runtime = RuntimeBundle.installAndVerify(context);
-        progress(listener, 5, "校验 Depth Anything V2 INT8 模型");
+        progress(listener, 5, "校验 Depth Anything V2 Q4 模型");
         DepthRuntimeBundle.installAndVerify(context);
 
         progress(listener, 8, "读取并缩放输入图像");
@@ -130,7 +130,7 @@ public final class RifeEngine {
             return render(
                     runtime, primary, endpoint, frameCount, fps, started, depth.elapsedMs,
                     true, null, selectedPreset,
-                    "Depth Anything V2 INT8 / ONNX Runtime + RIFE v4.6", 23, listener);
+                    "Depth Anything V2 Q4 / ONNX Runtime + RIFE v4.6", 23, listener);
         } finally {
             if (endpoint != null && !endpoint.isRecycled()) endpoint.recycle();
             if (!primary.isRecycled()) primary.recycle();
