@@ -5,7 +5,7 @@
         android:label="Local Video Lab"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity
-            android:name=".MainActivity"
+            android:name=".MainActivityV05"
             android:exported="true"
             android:screenOrientation="portrait">
             <intent-filter>
