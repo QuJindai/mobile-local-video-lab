@@ -30,19 +30,26 @@ public final class RifeEngine {
         public final int height;
         public final int fps;
         public final long elapsedMs;
+        public final long preprocessingMs;
         public final boolean singleImageMode;
         public final MotionSpec.Preset motionPreset;
+        public final DepthMotionSpec.Preset depthPreset;
+        public final String backendLabel;
 
-        Result(Uri uri, GenerationPlan plan, long elapsedMs, boolean singleImageMode,
-               MotionSpec.Preset motionPreset) {
+        Result(Uri uri, GenerationPlan plan, long elapsedMs, long preprocessingMs,
+               boolean singleImageMode, MotionSpec.Preset motionPreset,
+               DepthMotionSpec.Preset depthPreset, String backendLabel) {
             this.uri = uri;
             this.frames = plan.getFrames();
             this.width = plan.getWidth();
             this.height = plan.getHeight();
             this.fps = plan.getFps();
             this.elapsedMs = elapsedMs;
+            this.preprocessingMs = preprocessingMs;
             this.singleImageMode = singleImageMode;
             this.motionPreset = motionPreset;
+            this.depthPreset = depthPreset;
+            this.backendLabel = backendLabel;
         }
     }
 
@@ -71,7 +78,6 @@ public final class RifeEngine {
         boolean singleImageMode = secondaryUri == null;
         if (motionPreset == null) motionPreset = MotionSpec.Preset.CINEMATIC_AUTO;
         final MotionSpec.Preset selectedPreset = motionPreset;
-        File jobDir = new File(context.getCacheDir(), "rife-job-" + SystemClock.elapsedRealtime());
         try {
             if (secondaryUri != null) {
                 Bitmap decoded = ImagePrep.loadScaled(context.getContentResolver(), secondaryUri);
@@ -84,7 +90,69 @@ public final class RifeEngine {
             } else {
                 secondary = MotionEndpoint.create(primary, selectedPreset);
             }
+            progress(listener, 12, singleImageMode
+                    ? "已构造二维运动端点，启动 RIFE 神经插帧"
+                    : "启动 RIFE 双图神经插帧");
+            return render(
+                    runtime, primary, secondary, frameCount, fps, started, 0L,
+                    singleImageMode, selectedPreset, null,
+                    "RIFE v4.6 / ncnn / Vulkan", 12, listener);
+        } finally {
+            if (secondary != null && !secondary.isRecycled()) secondary.recycle();
+            if (!primary.isRecycled()) primary.recycle();
+        }
+    }
 
+    public Result generateDepthMotion(
+            Uri primaryUri,
+            int frameCount,
+            int fps,
+            DepthMotionSpec.Preset depthPreset,
+            ProgressListener listener) throws Exception {
+        long started = SystemClock.elapsedRealtime();
+        progress(listener, 2, "校验 RIFE/ncnn/Vulkan 运行时");
+        RuntimeBundle runtime = RuntimeBundle.installAndVerify(context);
+        progress(listener, 5, "校验 Depth Anything V2 INT8 模型");
+        DepthRuntimeBundle.installAndVerify(context);
+
+        progress(listener, 8, "读取并缩放输入图像");
+        Bitmap primary = ImagePrep.loadScaled(context.getContentResolver(), primaryUri);
+        Bitmap endpoint = null;
+        if (depthPreset == null) depthPreset = DepthMotionSpec.Preset.PARALLAX_LEFT;
+        final DepthMotionSpec.Preset selectedPreset = depthPreset;
+        try {
+            progress(listener, 10, "Depth Anything V2 本地估深");
+            DepthAnythingEngine.DepthMap depth = new DepthAnythingEngine(context).estimate(primary);
+            progress(listener, 19, String.format(Locale.US,
+                    "估深完成 %.2f s · 构造分层 3D 运动端点", depth.elapsedMs / 1000.0));
+            endpoint = DepthMotionEndpoint.create(primary, depth, selectedPreset);
+            progress(listener, 23, "3D 端点完成 · 启动 RIFE 神经补帧");
+            return render(
+                    runtime, primary, endpoint, frameCount, fps, started, depth.elapsedMs,
+                    true, null, selectedPreset,
+                    "Depth Anything V2 INT8 / ONNX Runtime + RIFE v4.6", 23, listener);
+        } finally {
+            if (endpoint != null && !endpoint.isRecycled()) endpoint.recycle();
+            if (!primary.isRecycled()) primary.recycle();
+        }
+    }
+
+    private Result render(
+            RuntimeBundle runtime,
+            Bitmap primary,
+            Bitmap secondary,
+            int frameCount,
+            int fps,
+            long started,
+            long preprocessingMs,
+            boolean singleImageMode,
+            MotionSpec.Preset motionPreset,
+            DepthMotionSpec.Preset depthPreset,
+            String backendLabel,
+            int rifeProgressStart,
+            ProgressListener listener) throws Exception {
+        File jobDir = new File(context.getCacheDir(), "rife-job-" + SystemClock.elapsedRealtime());
+        try {
             GenerationPlan plan = new GenerationPlan(
                     primary.getWidth(), primary.getHeight(), frameCount, fps);
             File inputDir = new File(jobDir, "input");
@@ -95,9 +163,6 @@ public final class RifeEngine {
             ImagePrep.writePng(primary, new File(inputDir, "00000001.png"));
             ImagePrep.writePng(secondary, new File(inputDir, "00000002.png"));
 
-            progress(listener, 12, singleImageMode
-                    ? "已构造运动端点，启动 RIFE 神经插帧"
-                    : "启动 RIFE 双图神经插帧");
             List<String> command = RifeCommand.build(
                     runtime.getExecutable().getAbsolutePath(),
                     inputDir.getAbsolutePath(),
@@ -119,7 +184,9 @@ public final class RifeEngine {
                     tail.addLast(line);
                     if (line.contains(" done")) {
                         completed++;
-                        int percent = 12 + Math.min(58, completed * 58 / frameCount);
+                        int span = Math.max(1, 70 - rifeProgressStart);
+                        int percent = rifeProgressStart
+                                + Math.min(span, completed * span / frameCount);
                         progress(listener, percent,
                                 "RIFE 推理 " + Math.min(completed, frameCount) + "/" + frameCount);
                     }
@@ -148,11 +215,10 @@ public final class RifeEngine {
             Uri uri = MediaStorePublisher.publish(context, mp4,
                     "local_video_" + timestamp + ".mp4");
             progress(listener, 100, "完成");
-            return new Result(uri, plan, SystemClock.elapsedRealtime() - started,
-                    singleImageMode, selectedPreset);
+            return new Result(
+                    uri, plan, SystemClock.elapsedRealtime() - started, preprocessingMs,
+                    singleImageMode, motionPreset, depthPreset, backendLabel);
         } finally {
-            if (secondary != null && !secondary.isRecycled()) secondary.recycle();
-            if (!primary.isRecycled()) primary.recycle();
             deleteRecursively(jobDir);
         }
     }
