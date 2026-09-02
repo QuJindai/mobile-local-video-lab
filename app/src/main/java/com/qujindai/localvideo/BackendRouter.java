@@ -3,12 +3,14 @@ package com.qujindai.localvideo;
 public final class BackendRouter {
     public enum Backend {
         RIFE_MOTION,
+        DEPTH_RIFE,
         MOBILE_I2V
     }
 
     public enum Blocker {
         NONE,
         BUILTIN_RUNTIME_MISSING,
+        DEPTH_RUNTIME_MISSING,
         MODEL_PACK_MISSING,
         RUNTIME_PENDING,
         INSUFFICIENT_RAM
@@ -36,6 +38,22 @@ public final class BackendRouter {
             boolean mobileModelPackInstalled,
             boolean mobileRuntimeReady,
             long totalRamMb) {
+        return resolve(
+                backend,
+                rifeRuntimeReady,
+                false,
+                mobileModelPackInstalled,
+                mobileRuntimeReady,
+                totalRamMb);
+    }
+
+    public static Decision resolve(
+            Backend backend,
+            boolean rifeRuntimeReady,
+            boolean depthRuntimeReady,
+            boolean mobileModelPackInstalled,
+            boolean mobileRuntimeReady,
+            long totalRamMb) {
         if (backend == Backend.RIFE_MOTION) {
             if (rifeRuntimeReady) {
                 return new Decision(backend, true, Blocker.NONE,
@@ -43,6 +61,19 @@ public final class BackendRouter {
             }
             return new Decision(backend, false, Blocker.BUILTIN_RUNTIME_MISSING,
                     "内置 RIFE 运行时不完整");
+        }
+
+        if (backend == Backend.DEPTH_RIFE) {
+            if (!rifeRuntimeReady) {
+                return new Decision(backend, false, Blocker.BUILTIN_RUNTIME_MISSING,
+                        "RIFE 补帧运行时不完整");
+            }
+            if (!depthRuntimeReady) {
+                return new Decision(backend, false, Blocker.DEPTH_RUNTIME_MISSING,
+                        "Depth Anything V2 / ONNX Runtime 模型运行时不完整");
+            }
+            return new Decision(backend, true, Blocker.NONE,
+                    "Depth Anything V2 INT8 + ONNX Runtime + RIFE 已就绪");
         }
 
         if (!mobileModelPackInstalled) {
