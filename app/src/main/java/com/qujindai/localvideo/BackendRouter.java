@@ -73,7 +73,7 @@ public final class BackendRouter {
                         "Depth Anything V2 / ONNX Runtime 模型运行时不完整");
             }
             return new Decision(backend, true, Blocker.NONE,
-                    "Depth Anything V2 INT8 + ONNX Runtime + RIFE 已就绪");
+                    "Depth Anything V2 Q4 + ONNX Runtime + RIFE 已就绪");
         }
 
         if (!mobileModelPackInstalled) {
