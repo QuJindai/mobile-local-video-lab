@@ -1,0 +1,62 @@
+import java.util.Base64
+
+plugins {
+    id 'com.android.application'
+}
+
+def signingSource = rootProject.file('signing/local-video-lab-debug.keystore.b64')
+def stableDebugKeystore = layout.buildDirectory.file('stable-signing/local-video-lab-debug.keystore').get().asFile
+if (!signingSource.isFile()) {
+    throw new GradleException('Stable V0.2+ debug signing source is missing')
+}
+stableDebugKeystore.parentFile.mkdirs()
+stableDebugKeystore.bytes = Base64.decoder.decode(signingSource.text.trim())
+
+android {
+    namespace 'com.qujindai.localvideo'
+    compileSdk 35
+
+    signingConfigs {
+        stableDebug {
+            storeFile stableDebugKeystore
+            storePassword 'localvideolab'
+            keyAlias 'local-video-lab-debug'
+            keyPassword 'localvideolab'
+        }
+    }
+
+    defaultConfig {
+        applicationId 'com.qujindai.localvideo'
+        minSdk 28
+        targetSdk 35
+        versionCode 3
+        versionName '0.3.0'
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+            signingConfig signingConfigs.stableDebug
+        }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+            keepDebugSymbols += ['**/librife.so']
+        }
+    }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+}
