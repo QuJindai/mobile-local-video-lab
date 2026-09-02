@@ -15,7 +15,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 55
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -35,6 +35,41 @@ jobs:
         run: |
           cd tools/mobilei2v
           python3 test_model_pack.py
+
+      - name: Fetch pinned Depth Anything V2 INT8 model
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/main/assets/models/depth-anything-v2
+          curl --fail --location --retry 4 --retry-delay 2 \
+            -o app/src/main/assets/models/depth-anything-v2/model_int8.onnx \
+            'https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model_int8.onnx?download=true'
+          echo '01aa7a23de3f4a0ee1a2bb9997e6918104c85a9f95dea46d27b9b3fb0c6b9001  app/src/main/assets/models/depth-anything-v2/model_int8.onnx' \
+            | sha256sum -c -
+          ls -lh app/src/main/assets/models/depth-anything-v2/model_int8.onnx
+
+      - name: Host-smoke Depth Anything V2 ONNX graph
+        shell: bash
+        run: |
+          python3 -m pip install --disable-pip-version-check --quiet 'onnxruntime==1.23.2' numpy
+          python3 - <<'PY'
+          import numpy as np
+          import onnxruntime as ort
+          path='app/src/main/assets/models/depth-anything-v2/model_int8.onnx'
+          session=ort.InferenceSession(path, providers=['CPUExecutionProvider'])
+          inputs=session.get_inputs()
+          outputs=session.get_outputs()
+          if len(inputs) != 1 or not outputs:
+              raise SystemExit(f'unexpected Depth Anything I/O: inputs={len(inputs)} outputs={len(outputs)}')
+          print('input', inputs[0].name, inputs[0].shape, inputs[0].type)
+          print('output', outputs[0].name, outputs[0].shape, outputs[0].type)
+          x=np.zeros((1,3,518,518), dtype=np.float32)
+          y=session.run(None, {inputs[0].name:x})[0]
+          print('smoke output', y.shape, y.dtype, float(np.nanmin(y)), float(np.nanmax(y)))
+          if y.size != 518*518 or not np.isfinite(y).all():
+              raise SystemExit('Depth Anything host smoke failed')
+          print('Depth Anything V2 host smoke PASS')
+          PY
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -74,30 +109,34 @@ jobs:
           aligns=[]
           for line in text:
               if re.match(r'\s*LOAD\s', line):
-                  token=line.split()[-1]
-                  aligns.append(int(token, 16))
-          if not aligns:
-              raise SystemExit('No LOAD segments found')
-          if min(aligns) < 0x4000:
-              raise SystemExit(f'16KB page-size gate failed: {aligns}')
+                  aligns.append(int(line.split()[-1], 16))
+          if not aligns or min(aligns) < 0x4000:
+              raise SystemExit(f'RIFE 16KB page-size gate failed: {aligns}')
           print('RIFE 16KB page-size gate PASS:', aligns)
           PY
 
       - name: Assemble debug APK
         run: gradle :app:assembleDebug --stacktrace
 
-      - name: Verify V0.4 APK runtime and signing
+      - name: Verify V0.5 APK runtime, models, launcher and signing
         shell: bash
         run: |
+          set -euo pipefail
           APK=app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
           unzip -l "$APK" | grep 'lib/arm64-v8a/librife.so'
           unzip -l "$APK" | grep 'assets/models/rife-v4.6/flownet.bin'
+          unzip -l "$APK" | grep 'assets/models/depth-anything-v2/model_int8.onnx'
           unzip -l "$APK" | grep 'lib/arm64-v8a/libonnxruntime.so'
           unzip -l "$APK" | grep 'lib/arm64-v8a/libonnxruntime4j_jni.so'
+          test "$(unzip -p "$APK" assets/models/depth-anything-v2/model_int8.onnx | sha256sum | awk '{print $1}')" \
+            = '01aa7a23de3f4a0ee1a2bb9997e6918104c85a9f95dea46d27b9b3fb0c6b9001'
+
           "$ANDROID_SDK_ROOT/build-tools/35.0.0/aapt" dump badging "$APK" | tee apk-badging.txt
-          grep "versionCode='4'" apk-badging.txt
-          grep "versionName='0.4.0'" apk-badging.txt
+          grep "versionCode='5'" apk-badging.txt
+          grep "versionName='0.5.0'" apk-badging.txt
+          grep "launchable-activity: name='com.qujindai.localvideo.MainActivityV05'" apk-badging.txt
+
           "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee apk-signing.txt
           grep -qi 'c9329387060f0259870e30b7bca6b9d9684ed86de716676962a1e75ef7f346ac' apk-signing.txt
 
@@ -129,7 +168,7 @@ jobs:
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: mobile-local-video-v0.4-apk
+          name: mobile-local-video-v0.5-apk
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             apk-sha256.txt
