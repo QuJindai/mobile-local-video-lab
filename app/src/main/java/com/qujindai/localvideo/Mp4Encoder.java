@@ -2,6 +2,8 @@ package com.qujindai.localvideo;
 
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.ImageFormat;
+import android.media.Image;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
@@ -27,7 +29,9 @@ public final class Mp4Encoder {
             int fps,
             ProgressListener progress) throws IOException {
         if (frames.isEmpty()) throw new IOException("no frames to encode");
-        if ((width & 1) != 0 || (height & 1) != 0) throw new IOException("encoder needs even dimensions");
+        if ((width & 1) != 0 || (height & 1) != 0) {
+            throw new IOException("encoder needs even dimensions");
+        }
 
         MediaCodec codec = null;
         MediaMuxer muxer = null;
@@ -44,35 +48,58 @@ public final class Mp4Encoder {
             codec = MediaCodec.createEncoderByType("video/avc");
             codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
             codec.start();
-            muxer = new MediaMuxer(output.getAbsolutePath(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+            final String codecName = codec.getName();
+            muxer = new MediaMuxer(output.getAbsolutePath(),
+                    MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
 
             MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
             int nextFrame = 0;
             boolean eosQueued = false;
             boolean eosSeen = false;
+            final int rawFrameSize = width * height * 3 / 2;
 
             while (!eosSeen) {
                 if (nextFrame < frames.size()) {
                     int inputIndex = codec.dequeueInputBuffer(10_000);
                     if (inputIndex >= 0) {
-                        ByteBuffer input = codec.getInputBuffer(inputIndex);
-                        if (input == null) throw new IOException("encoder input buffer unavailable");
-                        Bitmap bitmap = BitmapFactory.decodeFile(frames.get(nextFrame).getAbsolutePath());
-                        if (bitmap == null) throw new IOException("cannot decode frame " + frames.get(nextFrame));
+                        Bitmap bitmap = BitmapFactory.decodeFile(
+                                frames.get(nextFrame).getAbsolutePath());
+                        if (bitmap == null) {
+                            throw new IOException("cannot decode frame " + frames.get(nextFrame));
+                        }
                         Bitmap scaled = bitmap;
                         if (bitmap.getWidth() != width || bitmap.getHeight() != height) {
                             scaled = Bitmap.createScaledBitmap(bitmap, width, height, true);
                         }
-                        byte[] yuv = toI420(scaled);
+                        int[] argb = new int[width * height];
+                        scaled.getPixels(argb, 0, width, 0, 0, width, height);
+                        Yuv420Frame yuv = Yuv420Frame.fromArgb(argb, width, height);
                         if (scaled != bitmap) scaled.recycle();
                         bitmap.recycle();
-                        if (input.capacity() < yuv.length) {
-                            throw new IOException("encoder input buffer too small: " + input.capacity());
+
+                        Image inputImage = codec.getInputImage(inputIndex);
+                        if (inputImage == null) {
+                            throw new IOException(
+                                    "encoder does not expose YUV_420_888 input image: " + codecName);
                         }
-                        input.clear();
-                        input.put(yuv);
+                        if (inputImage.getFormat() != ImageFormat.YUV_420_888) {
+                            throw new IOException(
+                                    "unexpected encoder input image format " + inputImage.getFormat()
+                                            + " from " + codecName);
+                        }
+                        Image.Plane[] planes = inputImage.getPlanes();
+                        if (planes == null || planes.length != 3) {
+                            throw new IOException(
+                                    "encoder YUV input must expose exactly 3 planes: " + codecName);
+                        }
+
+                        writePlane(yuv.y, width, height, planes[0]);
+                        writePlane(yuv.u, width / 2, height / 2, planes[1]);
+                        writePlane(yuv.v, width / 2, height / 2, planes[2]);
+
                         long ptsUs = nextFrame * 1_000_000L / fps;
-                        codec.queueInputBuffer(inputIndex, 0, yuv.length, ptsUs, 0);
+                        // Android CTS queues width*height*3/2 after filling getInputImage().
+                        codec.queueInputBuffer(inputIndex, 0, rawFrameSize, ptsUs, 0);
                         nextFrame++;
                         if (progress != null) progress.onEncoded(nextFrame, frames.size());
                     }
@@ -100,7 +127,9 @@ public final class Mp4Encoder {
                     }
                     if (outputIndex >= 0) {
                         ByteBuffer encoded = codec.getOutputBuffer(outputIndex);
-                        if (encoded == null) throw new IOException("encoder output buffer unavailable");
+                        if (encoded == null) {
+                            throw new IOException("encoder output buffer unavailable");
+                        }
                         if ((info.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
                             info.size = 0;
                         }
@@ -130,38 +159,9 @@ public final class Mp4Encoder {
         }
     }
 
-    static byte[] toI420(Bitmap bitmap) {
-        int width = bitmap.getWidth();
-        int height = bitmap.getHeight();
-        int frameSize = width * height;
-        int chromaSize = frameSize / 4;
-        byte[] output = new byte[frameSize + chromaSize * 2];
-        int[] argb = new int[frameSize];
-        bitmap.getPixels(argb, 0, width, 0, 0, width, height);
-
-        int yIndex = 0;
-        int uIndex = frameSize;
-        int vIndex = frameSize + chromaSize;
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int color = argb[y * width + x];
-                int r = (color >> 16) & 0xff;
-                int g = (color >> 8) & 0xff;
-                int b = color & 0xff;
-                int yy = ((66 * r + 129 * g + 25 * b + 128) >> 8) + 16;
-                int uu = ((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128;
-                int vv = ((112 * r - 94 * g - 18 * b + 128) >> 8) + 128;
-                output[yIndex++] = (byte) clamp(yy);
-                if ((y & 1) == 0 && (x & 1) == 0) {
-                    output[uIndex++] = (byte) clamp(uu);
-                    output[vIndex++] = (byte) clamp(vv);
-                }
-            }
-        }
-        return output;
-    }
-
-    private static int clamp(int value) {
-        return Math.max(0, Math.min(255, value));
+    private static void writePlane(byte[] source, int width, int height, Image.Plane plane) {
+        ByteBuffer buffer = plane.getBuffer();
+        Yuv420PlaneWriter.write(source, width, height, buffer,
+                plane.getRowStride(), plane.getPixelStride());
     }
 }
