@@ -3,10 +3,10 @@ package com.qujindai.localvideo;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
-import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -17,15 +17,16 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.MediaController;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
-import android.widget.VideoView;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
@@ -45,6 +46,7 @@ public final class MainActivity extends Activity {
     private Uri primaryUri;
     private Uri secondaryUri;
     private Uri lastVideoUri;
+    private ResultRecord lastRecord;
     private UiStatePolicy.Phase phase = UiStatePolicy.Phase.IDLE;
     private ResultHistoryStore historyStore;
     private String lastDiagnostics = "";
@@ -65,10 +67,13 @@ public final class MainActivity extends Activity {
     private Button diagnosticsButton;
     private Spinner framesSpinner;
     private Spinner fpsSpinner;
+    private Spinner motionSpinner;
     private LinearLayout resultCard;
     private LinearLayout historyContainer;
-    private VideoView resultVideo;
+    private ImageView resultThumbnail;
     private TextView resultTitle;
+    private TextView resultMeta;
+    private TextView resultPlayOverlay;
     private boolean detailsExpanded;
 
     @Override
@@ -77,11 +82,12 @@ public final class MainActivity extends Activity {
         historyStore = new ResultHistoryStore(this);
         setContentView(buildUi());
 
-        lastVideoUri = historyStore.latest();
-        if (lastVideoUri != null) {
+        lastRecord = historyStore.latestRecord();
+        if (lastRecord != null) {
+            lastVideoUri = Uri.parse(lastRecord.uri);
             phase = UiStatePolicy.Phase.SUCCESS;
-            showResult(lastVideoUri, false);
-            statusView.setText("已恢复最近生成结果，可直接播放或分享。请选择主图开始新任务。");
+            showResult(lastRecord, false);
+            statusView.setText("已恢复最近生成结果。点击缩略图可全屏播放。");
         } else {
             statusView.setText("选择一张主图即可开始。第二张图为可选项。");
         }
@@ -107,7 +113,7 @@ public final class MainActivity extends Activity {
         TextView title = text("Local Video Lab", 25, true);
         titleRow.addView(title, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        TextView badge = text("V0.2", 12, true);
+        TextView badge = text("V0.3", 12, true);
         badge.setTextColor(Color.WHITE);
         badge.setGravity(Gravity.CENTER);
         badge.setBackground(rounded(COLOR_ACCENT, 20));
@@ -116,7 +122,8 @@ public final class MainActivity extends Activity {
         root.addView(titleRow);
 
         TextView subtitle = text(
-                "完全离线 · RIFE v4.6 · ncnn · Vulkan\n单图生成轻微镜头运动，双图生成神经插值视频。", 14, false);
+                "完全离线 · RIFE v4.6 · ncnn · Vulkan\n" +
+                        "单图支持电影自动、推近、横移和上移；双图生成神经插值视频。", 14, false);
         subtitle.setTextColor(COLOR_MUTED);
         root.addView(subtitle);
 
@@ -163,10 +170,21 @@ public final class MainActivity extends Activity {
 
         framesSpinner = spinner(new String[] { "9 帧 · 快速", "17 帧 · 推荐" }, 1);
         fpsSpinner = spinner(new String[] { "6 FPS", "8 FPS · 推荐", "12 FPS" }, 1);
+        motionSpinner = spinner(new String[] {
+                "电影自动 · 推荐",
+                "推近",
+                "向左平移",
+                "向上漂移"
+        }, 0);
         parametersCard.addView(label("帧数"));
         parametersCard.addView(framesSpinner);
         parametersCard.addView(label("播放速度"));
         parametersCard.addView(fpsSpinner);
+        parametersCard.addView(label("单图运动方式"));
+        parametersCard.addView(motionSpinner);
+        TextView motionHint = text("仅单图模式生效；双图模式直接使用两张输入图做神经插值。", 12, false);
+        motionHint.setTextColor(COLOR_MUTED);
+        parametersCard.addView(motionHint);
 
         generateButton = primaryAction("开始生成");
         generateButton.setOnClickListener(v -> startGeneration());
@@ -191,17 +209,37 @@ public final class MainActivity extends Activity {
         resultTitle = text("最近结果", 14, true);
         resultCard.addView(resultTitle);
 
-        resultVideo = new VideoView(this);
-        resultVideo.setBackgroundColor(Color.BLACK);
+        FrameLayout previewFrame = new FrameLayout(this);
         LinearLayout.LayoutParams videoParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(230));
         videoParams.topMargin = dp(8);
-        resultCard.addView(resultVideo, videoParams);
+        resultCard.addView(previewFrame, videoParams);
+
+        resultThumbnail = new ImageView(this);
+        resultThumbnail.setBackgroundColor(0xffdfe4e3);
+        resultThumbnail.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        previewFrame.addView(resultThumbnail, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        resultPlayOverlay = text("▶  全屏播放", 16, true);
+        resultPlayOverlay.setTextColor(Color.WHITE);
+        resultPlayOverlay.setGravity(Gravity.CENTER);
+        resultPlayOverlay.setBackground(rounded(0xaa000000, 24));
+        resultPlayOverlay.setPadding(dp(18), dp(10), dp(18), dp(10));
+        FrameLayout.LayoutParams overlayParams = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        overlayParams.gravity = Gravity.CENTER;
+        previewFrame.addView(resultPlayOverlay, overlayParams);
+        previewFrame.setOnClickListener(v -> openLastVideo());
+
+        resultMeta = text("", 13, false);
+        resultMeta.setTextColor(COLOR_MUTED);
+        resultCard.addView(resultMeta);
 
         LinearLayout resultActions = new LinearLayout(this);
         resultActions.setOrientation(LinearLayout.HORIZONTAL);
         resultActions.setPadding(0, dp(8), 0, 0);
-        openButton = secondaryAction("打开视频");
+        openButton = secondaryAction("全屏播放");
         shareButton = primaryAction("分享视频");
         openButton.setOnClickListener(v -> openLastVideo());
         shareButton.setOnClickListener(v -> shareLastVideo());
@@ -212,7 +250,7 @@ public final class MainActivity extends Activity {
         LinearLayout historyCard = card();
         root.addView(historyCard, cardParams());
         historyCard.addView(sectionTitle("最近生成"));
-        TextView historyHint = text("保留最近 5 个结果，重启 App 后仍可打开。", 12, false);
+        TextView historyHint = text("保留最近 5 个结果，并显示缩略图、时间与视频参数。", 12, false);
         historyHint.setTextColor(COLOR_MUTED);
         historyCard.addView(historyHint);
         historyContainer = new LinearLayout(this);
@@ -265,12 +303,12 @@ public final class MainActivity extends Activity {
             primaryUri = uri;
             primaryPreview.setImageURI(uri);
             phase = UiStatePolicy.Phase.READY;
-            statusView.setText("主图已就绪。可直接生成，或添加第二张图。 ");
+            statusView.setText("主图已就绪。可直接生成，或添加第二张图。");
         } else if (requestCode == PICK_SECONDARY) {
             secondaryUri = uri;
             if (primaryUri != null) phase = UiStatePolicy.Phase.READY;
             secondaryLabel.setText("第二张：已选择 · 当前为双图插值模式");
-            statusView.setText("双图插值模式已就绪。 ");
+            statusView.setText("双图插值模式已就绪。单图运动方式将暂时忽略。");
         }
         diagnosticsButton.setVisibility(View.GONE);
         applyUiState();
@@ -278,7 +316,7 @@ public final class MainActivity extends Activity {
 
     private void startGeneration() {
         if (primaryUri == null) {
-            statusView.setText("请先选择主图。 ");
+            statusView.setText("请先选择主图。");
             return;
         }
         final int frames = framesSpinner.getSelectedItemPosition() == 0 ? 9 : 17;
@@ -288,6 +326,7 @@ public final class MainActivity extends Activity {
             case 2: fps = 12; break;
             default: fps = 8; break;
         }
+        final MotionSpec.Preset motionPreset = selectedMotionPreset();
 
         phase = UiStatePolicy.Phase.GENERATING;
         progressBar.setProgress(0);
@@ -299,22 +338,37 @@ public final class MainActivity extends Activity {
         worker.submit(() -> {
             try {
                 RifeEngine engine = new RifeEngine(this);
-                RifeEngine.Result result = engine.generate(primaryUri, secondaryUri, frames, fps,
+                RifeEngine.Result result = engine.generate(
+                        primaryUri,
+                        secondaryUri,
+                        frames,
+                        fps,
+                        motionPreset,
                         (percent, message) -> runOnUiThread(() -> {
                             progressBar.setProgress(percent);
                             statusView.setText(percent + "% · " + message);
                         }));
 
                 int thermalAfter = thermalStatus();
+                long durationMs = Math.max(1L, result.frames * 1000L / Math.max(1, result.fps));
+                ResultRecord record = new ResultRecord(
+                        result.uri.toString(),
+                        System.currentTimeMillis(),
+                        durationMs,
+                        result.width,
+                        result.height,
+                        result.frames,
+                        result.fps);
+                lastRecord = record;
                 lastVideoUri = result.uri;
-                historyStore.record(result.uri);
+                historyStore.record(record);
                 lastDiagnostics = formatMetrics(result, thermalBefore, thermalAfter);
                 runOnUiThread(() -> {
                     phase = UiStatePolicy.Phase.SUCCESS;
                     progressBar.setProgress(100);
-                    statusView.setText("100% · 已保存到 Movies/LocalVideoLab");
+                    statusView.setText("100% · 已保存；点击结果缩略图可全屏播放");
                     metricsView.setText(lastDiagnostics);
-                    showResult(result.uri, true);
+                    showResult(record, true);
                     refreshHistory();
                     applyUiState();
                 });
@@ -335,39 +389,63 @@ public final class MainActivity extends Activity {
         });
     }
 
-    private void showResult(Uri uri, boolean autoPlay) {
-        if (uri == null) return;
-        lastVideoUri = uri;
+    private void showResult(ResultRecord record, boolean newlyGenerated) {
+        if (record == null) return;
+        lastRecord = record;
+        lastVideoUri = Uri.parse(record.uri);
         resultCard.setVisibility(View.VISIBLE);
-        resultTitle.setText(autoPlay ? "刚刚生成" : "最近结果");
+        resultTitle.setText(newlyGenerated ? "刚刚生成" : "最近结果");
+        resultMeta.setText(resultMetadata(record));
+        resultThumbnail.setImageDrawable(null);
+        resultThumbnail.setBackgroundColor(0xffdfe4e3);
+        resultPlayOverlay.setText("读取视频缩略图…");
+        loadThumbnailAsync(record, resultThumbnail, true);
+    }
 
-        MediaController controller = new MediaController(this);
-        controller.setAnchorView(resultVideo);
-        resultVideo.setMediaController(controller);
-        resultVideo.setVideoURI(uri);
-        resultVideo.setOnPreparedListener(player -> {
-            player.setLooping(true);
-            if (autoPlay) {
-                resultVideo.start();
-            } else {
-                resultVideo.seekTo(1);
+    private void loadThumbnailAsync(ResultRecord record, ImageView target, boolean resultPreview) {
+        if (record == null || target == null) return;
+        String tag = record.uri;
+        target.setTag(tag);
+        worker.submit(() -> {
+            Bitmap bitmap = null;
+            try {
+                bitmap = VideoThumbnailLoader.load(
+                        this,
+                        Uri.parse(record.uri),
+                        resultPreview ? 720 : 240,
+                        resultPreview ? 720 : 180);
+                Bitmap ready = bitmap;
+                runOnUiThread(() -> {
+                    if (!tag.equals(target.getTag())) {
+                        if (!ready.isRecycled()) ready.recycle();
+                        return;
+                    }
+                    target.setImageBitmap(ready);
+                    if (resultPreview) resultPlayOverlay.setText("▶  全屏播放");
+                });
+            } catch (Throwable error) {
+                if (bitmap != null && !bitmap.isRecycled()) bitmap.recycle();
+                runOnUiThread(() -> {
+                    if (tag.equals(target.getTag()) && resultPreview) {
+                        resultPlayOverlay.setText("▶  缩略图不可用 · 点击播放");
+                    }
+                });
             }
         });
-        resultVideo.setOnErrorListener((MediaPlayer mp, int what, int extra) -> {
-            statusView.setText("视频预览不可用，可尝试“打开视频”交给系统播放器。 ");
-            return true;
-        });
-        resultVideo.requestFocus();
     }
 
     private void openLastVideo() {
-        if (lastVideoUri == null) return;
+        openVideo(lastVideoUri);
+    }
+
+    private void openVideo(Uri uri) {
+        if (uri == null) return;
         try {
             Intent intent = new Intent(Intent.ACTION_VIEW);
-            intent.setDataAndType(lastVideoUri, "video/mp4");
+            intent.setDataAndType(uri, "video/mp4");
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            intent.setClipData(ClipData.newRawUri("generated-video", lastVideoUri));
-            startActivity(Intent.createChooser(intent, "打开视频"));
+            intent.setClipData(ClipData.newRawUri("generated-video", uri));
+            startActivity(Intent.createChooser(intent, "全屏播放视频"));
         } catch (RuntimeException error) {
             statusView.setText("没有可用的视频播放器：" + safeMessage(error));
         }
@@ -391,31 +469,49 @@ public final class MainActivity extends Activity {
         if (lastDiagnostics == null || lastDiagnostics.isEmpty()) return;
         Intent intent = new Intent(Intent.ACTION_SEND);
         intent.setType("text/plain");
-        intent.putExtra(Intent.EXTRA_SUBJECT, "Local Video Lab V0.2 diagnostics");
+        intent.putExtra(Intent.EXTRA_SUBJECT, "Local Video Lab V0.3 diagnostics");
         intent.putExtra(Intent.EXTRA_TEXT, lastDiagnostics);
         startActivity(Intent.createChooser(intent, "导出诊断信息"));
     }
 
     private void refreshHistory() {
         historyContainer.removeAllViews();
-        List<Uri> recent = historyStore.load();
+        List<ResultRecord> recent = historyStore.loadRecords();
         if (recent.isEmpty()) {
             TextView empty = text("暂无历史结果", 13, false);
             empty.setTextColor(COLOR_MUTED);
             historyContainer.addView(empty);
             return;
         }
+
         for (int i = 0; i < recent.size(); i++) {
-            Uri uri = recent.get(i);
-            Button item = textAction((i == 0 ? "最近一次" : "历史结果 " + (i + 1)) + " · 点击播放");
-            item.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-            item.setOnClickListener(v -> {
+            ResultRecord record = recent.get(i);
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(0, dp(8), 0, dp(8));
+            row.setClickable(true);
+            row.setOnClickListener(v -> {
+                lastRecord = record;
+                lastVideoUri = Uri.parse(record.uri);
                 phase = UiStatePolicy.Phase.SUCCESS;
-                showResult(uri, true);
-                statusView.setText("正在播放已保存结果。 ");
+                showResult(record, false);
+                statusView.setText("已载入历史结果。点击缩略图或“全屏播放”。");
                 applyUiState();
             });
-            historyContainer.addView(item);
+
+            ImageView thumbnail = new ImageView(this);
+            thumbnail.setBackgroundColor(0xffdfe4e3);
+            thumbnail.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            row.addView(thumbnail, new LinearLayout.LayoutParams(dp(108), dp(78)));
+            loadThumbnailAsync(record, thumbnail, false);
+
+            TextView meta = text(historyMetadata(record, i), 13, false);
+            meta.setTextColor(0xff37474f);
+            meta.setPadding(dp(12), 0, 0, 0);
+            row.addView(meta, new LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            historyContainer.addView(row);
         }
     }
 
@@ -435,12 +531,65 @@ public final class MainActivity extends Activity {
         clearSecondaryButton.setVisibility(state.clearSecondaryVisible ? View.VISIBLE : View.GONE);
         framesSpinner.setEnabled(phase != UiStatePolicy.Phase.GENERATING);
         fpsSpinner.setEnabled(phase != UiStatePolicy.Phase.GENERATING);
+        motionSpinner.setEnabled(phase != UiStatePolicy.Phase.GENERATING && secondaryUri == null);
         openButton.setEnabled(state.openEnabled);
         shareButton.setEnabled(state.shareEnabled);
         resultCard.setVisibility(lastVideoUri == null ? View.GONE : View.VISIBLE);
     }
 
+    private MotionSpec.Preset selectedMotionPreset() {
+        switch (motionSpinner.getSelectedItemPosition()) {
+            case 1: return MotionSpec.Preset.PUSH_IN;
+            case 2: return MotionSpec.Preset.PAN_LEFT;
+            case 3: return MotionSpec.Preset.DRIFT_UP;
+            default: return MotionSpec.Preset.CINEMATIC_AUTO;
+        }
+    }
+
+    private static String motionPresetName(MotionSpec.Preset preset) {
+        if (preset == null) return "电影自动";
+        switch (preset) {
+            case PUSH_IN: return "推近";
+            case PAN_LEFT: return "向左平移";
+            case DRIFT_UP: return "向上漂移";
+            case CINEMATIC_AUTO:
+            default: return "电影自动";
+        }
+    }
+
+    private String resultMetadata(ResultRecord record) {
+        String time = record.createdAtMs > 0
+                ? new SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(new Date(record.createdAtMs))
+                : "V0.2 历史结果";
+        String duration = record.durationMs > 0
+                ? String.format(Locale.US, "%.1f 秒", record.durationMs / 1000.0)
+                : "时长未知";
+        if (record.width > 0 && record.height > 0) {
+            return String.format(Locale.US, "%s · %s\n%d×%d · %d 帧 · %d FPS",
+                    time, duration, record.width, record.height, record.frames, record.fps);
+        }
+        return time + " · " + duration;
+    }
+
+    private String historyMetadata(ResultRecord record, int index) {
+        String prefix = index == 0 ? "最近一次" : "历史 " + (index + 1);
+        String time = record.createdAtMs > 0
+                ? new SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(new Date(record.createdAtMs))
+                : "旧版记录";
+        String duration = record.durationMs > 0
+                ? String.format(Locale.US, "%.1fs", record.durationMs / 1000.0)
+                : "--";
+        if (record.width > 0) {
+            return String.format(Locale.US, "%s · %s\n%s · %d×%d · %d帧/%dFPS",
+                    prefix, time, duration, record.width, record.height, record.frames, record.fps);
+        }
+        return prefix + " · " + time + "\n点击载入并全屏播放";
+    }
+
     private String formatMetrics(RifeEngine.Result result, int thermalBefore, int thermalAfter) {
+        String mode = result.singleImageMode
+                ? "单图运动 · " + motionPresetName(result.motionPreset)
+                : "双图插值";
         return String.format(Locale.US,
                 "模型: RIFE v4.6 / ncnn / Vulkan\n" +
                         "模式: %s\n" +
@@ -449,7 +598,7 @@ public final class MainActivity extends Activity {
                         "热状态: %s → %s\n" +
                         "Android API: %d\n" +
                         "Java max heap: %.0f MB · native heap: %.0f MB",
-                result.singleImageMode ? "单图运动" : "双图插值",
+                mode,
                 result.width, result.height, result.frames, result.fps,
                 result.elapsedMs / 1000.0,
                 thermalName(thermalBefore), thermalName(thermalAfter),
@@ -460,7 +609,7 @@ public final class MainActivity extends Activity {
 
     private String formatError(Throwable error) {
         return String.format(Locale.US,
-                "Local Video Lab V0.2\n" +
+                "Local Video Lab V0.3\n" +
                         "状态: 生成失败\n" +
                         "异常: %s\n" +
                         "信息: %s\n" +
@@ -471,7 +620,7 @@ public final class MainActivity extends Activity {
                         "native heap: %.0f MB",
                 error.getClass().getName(),
                 safeMessage(error),
-                secondaryUri == null ? "单图运动" : "双图插值",
+                secondaryUri == null ? "单图运动 · " + motionPresetName(selectedMotionPreset()) : "双图插值",
                 Build.VERSION.SDK_INT,
                 thermalName(thermalStatus()),
                 Runtime.getRuntime().maxMemory() / 1048576.0,
@@ -621,7 +770,6 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        try { resultVideo.stopPlayback(); } catch (Exception ignored) {}
         worker.shutdownNow();
         super.onDestroy();
     }
