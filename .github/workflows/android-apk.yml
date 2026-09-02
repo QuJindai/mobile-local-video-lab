@@ -91,6 +91,8 @@ jobs:
           "$ANDROID_SDK_ROOT/build-tools/35.0.0/aapt" dump badging "$APK" | tee apk-badging.txt
           grep "versionCode='2'" apk-badging.txt
           grep "versionName='0.2.0'" apk-badging.txt
+          "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee apk-signing.txt
+          grep -qi 'c9329387060f0259870e30b7bca6b9d9684ed86de716676962a1e75ef7f346ac' apk-signing.txt
           sha256sum "$APK" | tee apk-sha256.txt
 
       - name: Upload installable APK
@@ -101,6 +103,7 @@ jobs:
             app/build/outputs/apk/debug/app-debug.apk
             apk-sha256.txt
             apk-badging.txt
+            apk-signing.txt
             app/src/main/assets/runtime/runtime-manifest.txt
           if-no-files-found: error
           retention-days: 30
