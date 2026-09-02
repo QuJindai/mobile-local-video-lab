@@ -2,7 +2,6 @@
     <uses-feature android:name="android.hardware.vulkan.level" android:required="false" />
     <application
         android:allowBackup="false"
-        android:extractNativeLibs="true"
         android:label="Local Video Lab"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity
