@@ -89,8 +89,8 @@ jobs:
           unzip -l "$APK" | grep 'lib/arm64-v8a/librife.so'
           unzip -l "$APK" | grep 'assets/models/rife-v4.6/flownet.bin'
           "$ANDROID_SDK_ROOT/build-tools/35.0.0/aapt" dump badging "$APK" | tee apk-badging.txt
-          grep "versionCode='2'" apk-badging.txt
-          grep "versionName='0.2.0'" apk-badging.txt
+          grep "versionCode='3'" apk-badging.txt
+          grep "versionName='0.3.0'" apk-badging.txt
           "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee apk-signing.txt
           grep -qi 'c9329387060f0259870e30b7bca6b9d9684ed86de716676962a1e75ef7f346ac' apk-signing.txt
           sha256sum "$APK" | tee apk-sha256.txt
@@ -98,7 +98,7 @@ jobs:
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: mobile-local-video-v0.2-apk
+          name: mobile-local-video-v0.3-apk
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             apk-sha256.txt
