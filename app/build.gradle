@@ -7,7 +7,7 @@ plugins {
 def signingSource = rootProject.file('signing/local-video-lab-debug.keystore.b64')
 def stableDebugKeystore = layout.buildDirectory.file('stable-signing/local-video-lab-debug.keystore').get().asFile
 if (!signingSource.isFile()) {
-    throw new GradleException('Stable V0.2 debug signing source is missing')
+    throw new GradleException('Stable V0.2+ debug signing source is missing')
 }
 stableDebugKeystore.parentFile.mkdirs()
 stableDebugKeystore.bytes = Base64.decoder.decode(signingSource.text.trim())
@@ -29,8 +29,8 @@ android {
         applicationId 'com.qujindai.localvideo'
         minSdk 28
         targetSdk 35
-        versionCode 2
-        versionName '0.2.0'
+        versionCode 3
+        versionName '0.3.0'
     }
 
     buildTypes {
