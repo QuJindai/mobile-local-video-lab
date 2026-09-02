@@ -31,6 +31,11 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Test deterministic MobileI2V model packs
+        run: |
+          cd tools/mobilei2v
+          python3 test_model_pack.py
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
@@ -55,7 +60,7 @@ jobs:
       - name: Build packaged RIFE ncnn Vulkan runtime
         run: bash scripts/prepare_rife_runtime.sh
 
-      - name: Verify runtime payload and ELF alignment
+      - name: Verify RIFE runtime payload and ELF alignment
         shell: bash
         run: |
           test -s app/src/main/jniLibs/arm64-v8a/librife.so
@@ -75,35 +80,62 @@ jobs:
               raise SystemExit('No LOAD segments found')
           if min(aligns) < 0x4000:
               raise SystemExit(f'16KB page-size gate failed: {aligns}')
-          print('16KB page-size gate PASS:', aligns)
+          print('RIFE 16KB page-size gate PASS:', aligns)
           PY
 
       - name: Assemble debug APK
         run: gradle :app:assembleDebug --stacktrace
 
-      - name: Verify APK
+      - name: Verify V0.4 APK runtime and signing
         shell: bash
         run: |
           APK=app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
           unzip -l "$APK" | grep 'lib/arm64-v8a/librife.so'
           unzip -l "$APK" | grep 'assets/models/rife-v4.6/flownet.bin'
+          unzip -l "$APK" | grep 'lib/arm64-v8a/libonnxruntime.so'
+          unzip -l "$APK" | grep 'lib/arm64-v8a/libonnxruntime4j_jni.so'
           "$ANDROID_SDK_ROOT/build-tools/35.0.0/aapt" dump badging "$APK" | tee apk-badging.txt
-          grep "versionCode='3'" apk-badging.txt
-          grep "versionName='0.3.0'" apk-badging.txt
+          grep "versionCode='4'" apk-badging.txt
+          grep "versionName='0.4.0'" apk-badging.txt
           "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee apk-signing.txt
           grep -qi 'c9329387060f0259870e30b7bca6b9d9684ed86de716676962a1e75ef7f346ac' apk-signing.txt
+
+          rm -rf apk-native && mkdir -p apk-native
+          unzip -q "$APK" 'lib/arm64-v8a/*.so' -d apk-native
+          READELF="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          python3 - "$READELF" <<'PY'
+          import pathlib, re, subprocess, sys
+          readelf=sys.argv[1]
+          failures=[]
+          libs=sorted(pathlib.Path('apk-native/lib/arm64-v8a').glob('*.so'))
+          if not libs:
+              raise SystemExit('no arm64 native libraries in APK')
+          for lib in libs:
+              text=subprocess.check_output([readelf, '-lW', str(lib)], text=True)
+              aligns=[]
+              for line in text.splitlines():
+                  if re.match(r'\s*LOAD\s', line):
+                      aligns.append(int(line.split()[-1], 16))
+              if not aligns or min(aligns) < 0x4000:
+                  failures.append((lib.name, aligns))
+              else:
+                  print('16KB PASS', lib.name, aligns)
+          if failures:
+              raise SystemExit(f'APK 16KB ELF gate failed: {failures}')
+          PY
           sha256sum "$APK" | tee apk-sha256.txt
 
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: mobile-local-video-v0.3-apk
+          name: mobile-local-video-v0.4-apk
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             apk-sha256.txt
             apk-badging.txt
             apk-signing.txt
             app/src/main/assets/runtime/runtime-manifest.txt
+            tools/mobilei2v/upstream.lock.properties
           if-no-files-found: error
           retention-days: 30
