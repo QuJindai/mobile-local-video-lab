@@ -10,19 +10,26 @@ import argparse
 import hashlib
 import os
 from pathlib import Path, PurePosixPath
-import tempfile
 import zipfile
 
 FORMAT = "local-video-model-pack-v1"
 MAX_FILES = 128
 FIXED_ZIP_TIME = (2026, 1, 1, 0, 0, 0)
+CHUNK = 1024 * 1024
 
 
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+        for chunk in iter(lambda: handle.read(CHUNK), b""):
             digest.update(chunk)
+    return digest.hexdigest()
+
+
+def sha256_stream(handle) -> str:
+    digest = hashlib.sha256()
+    for chunk in iter(lambda: handle.read(CHUNK), b""):
+        digest.update(chunk)
     return digest.hexdigest()
 
 
@@ -76,10 +83,14 @@ def add_bytes(zf: zipfile.ZipFile, name: str, data: bytes) -> None:
 
 def add_file(zf: zipfile.ZipFile, name: str, path: Path) -> None:
     info = zipfile.ZipInfo(name, FIXED_ZIP_TIME)
-    info.compress_type = zipfile.ZIP_STORED if path.suffix.lower() in {".onnx", ".bin"} else zipfile.ZIP_DEFLATED
+    info.compress_type = zipfile.ZIP_STORED if path.suffix.lower() in {".onnx", ".bin", ".pth"} else zipfile.ZIP_DEFLATED
     info.external_attr = 0o100644 << 16
-    with path.open("rb") as handle:
-        zf.writestr(info, handle.read())
+    with path.open("rb") as src, zf.open(info, "w", force_zip64=True) as dst:
+        while True:
+            chunk = src.read(CHUNK)
+            if not chunk:
+                break
+            dst.write(chunk)
 
 
 def build_pack(args: argparse.Namespace) -> Path:
@@ -131,7 +142,8 @@ def verify_pack(path: Path) -> dict[str, str]:
             if pure.is_absolute() or ".." in pure.parts or rel not in names:
                 raise ValueError(f"unsafe/missing artifact: {rel}")
             expected = props.get(f"sha256.{rel}", "")
-            actual = hashlib.sha256(zf.read(rel)).hexdigest()
+            with zf.open(rel, "r") as handle:
+                actual = sha256_stream(handle)
             if expected != actual:
                 raise ValueError(f"checksum mismatch: {rel}")
         return props
