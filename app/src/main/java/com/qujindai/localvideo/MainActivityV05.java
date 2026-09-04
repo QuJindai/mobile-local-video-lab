@@ -34,7 +34,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * V0.5 handset workbench.
+ * V0.6 handset workbench.
  *
  * RIFE is the validated baseline, Depth 3D is a genuine second local model path,
  * and MobileI2V remains blocked until its actual Android execution loop exists.
@@ -64,6 +64,8 @@ public final class MainActivityV05 extends Activity {
     private OnnxRuntimeFoundation.Status onnxStatus;
     private String lastDiagnostics = "";
     private boolean modelInstalling;
+    private boolean checkpointDownloading;
+    private MobileI2VCheckpointDownloader checkpointDownloader;
     private boolean detailsExpanded;
 
     private Spinner backendSpinner;
@@ -73,6 +75,7 @@ public final class MainActivityV05 extends Activity {
     private Spinner depthMotionSpinner;
     private TextView backendStatusView;
     private TextView mobilePackView;
+    private TextView checkpointDownloadView;
     private TextView deviceView;
     private TextView modeLabel;
     private TextView secondaryLabel;
@@ -93,6 +96,9 @@ public final class MainActivityV05 extends Activity {
     private Button openButton;
     private Button shareButton;
     private Button importModelButton;
+    private Button downloadOfficialButton;
+    private Button downloadMirrorButton;
+    private Button cancelCheckpointDownloadButton;
     private Button removeModelButton;
     private Button detailsButton;
     private Button diagnosticsButton;
@@ -139,7 +145,7 @@ public final class MainActivityV05 extends Activity {
         TextView title = text("Local Video Lab", 25, true);
         titleRow.addView(title, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        TextView badge = text("V0.5", 12, true);
+        TextView badge = text("V0.6", 12, true);
         badge.setTextColor(Color.WHITE);
         badge.setGravity(Gravity.CENTER);
         badge.setBackground(rounded(COLOR_ACCENT, 20));
@@ -148,7 +154,7 @@ public final class MainActivityV05 extends Activity {
         root.addView(titleRow);
 
         TextView subtitle = text(
-                "完全离线 · 三后端工作台\n"
+                "生成完全离线 · 模型支持双源下载\n"
                         + "RIFE 已验收 · Depth Anything V2 Q4 + RIFE 真实估深 3D · MobileI2V 语义 I2V 部署中",
                 14, false);
         subtitle.setTextColor(COLOR_MUTED);
@@ -223,6 +229,35 @@ public final class MainActivityV05 extends Activity {
         mobilePackView = text("", 12, false);
         mobilePackView.setTextColor(COLOR_MUTED);
         card.addView(mobilePackView);
+
+        card.addView(label("MobileI2V 上游权重下载"));
+        checkpointDownloadView = text("", 12, false);
+        checkpointDownloadView.setTextColor(COLOR_MUTED);
+        card.addView(checkpointDownloadView);
+
+        LinearLayout downloadRow = new LinearLayout(this);
+        downloadRow.setOrientation(LinearLayout.HORIZONTAL);
+        downloadOfficialButton = secondaryAction("下载 · 官方原版");
+        downloadMirrorButton = secondaryAction("下载 · 国内镜像");
+        downloadOfficialButton.setOnClickListener(v ->
+                startCheckpointDownload(MobileI2VDownloadSource.official()));
+        downloadMirrorButton.setOnClickListener(v ->
+                startCheckpointDownload(MobileI2VDownloadSource.chinaMirror()));
+        downloadRow.addView(downloadOfficialButton, weightedButtonParams(1f, 0));
+        downloadRow.addView(downloadMirrorButton, weightedButtonParams(1f, dp(8)));
+        card.addView(downloadRow);
+
+        cancelCheckpointDownloadButton = textAction("取消下载 · 保留断点");
+        cancelCheckpointDownloadButton.setVisibility(View.GONE);
+        cancelCheckpointDownloadButton.setOnClickListener(v -> cancelCheckpointDownload());
+        card.addView(cancelCheckpointDownloadButton);
+
+        TextView downloadNote = text(
+                "两条路径锁定同一 upstream checkpoint 与 SHA-256。下载的是原始 hybrid_371.pth；"
+                        + "它用于后续 Android 导出/转换，不会被冒充为可执行 .mlvpkg。",
+                12, false);
+        downloadNote.setTextColor(COLOR_WARNING);
+        card.addView(downloadNote);
 
         importModelButton = secondaryAction("导入 MobileI2V 模型包 (.mlvpkg)");
         importModelButton.setOnClickListener(v -> pickModelPack());
@@ -392,6 +427,76 @@ public final class MainActivityV05 extends Activity {
         card.addView(historyContainer);
     }
 
+    private void startCheckpointDownload(MobileI2VDownloadSource source) {
+        if (checkpointDownloading || modelInstalling || phase == UiStatePolicy.Phase.GENERATING) return;
+        checkpointDownloading = true;
+        checkpointDownloader = new MobileI2VCheckpointDownloader();
+        progressBar.setProgress(CheckpointDownloadPolicy.percent(
+                MobileI2VCheckpointDownloader.partialBytes(this), source.expectedBytes));
+        statusView.setText("准备下载 · " + source.label);
+        refreshBackendStatus();
+        applyUiState();
+
+        worker.submit(() -> {
+            try {
+                MobileI2VCheckpointDownloader.Result result = checkpointDownloader.download(
+                        this, source, (percent, downloaded, total, bytesPerSecond, message) ->
+                                runOnUiThread(() -> {
+                                    progressBar.setProgress(percent);
+                                    statusView.setText(String.format(Locale.US,
+                                            "%d%% · %s · %s / %s · %s/s",
+                                            percent, message, formatDownloadBytes(downloaded),
+                                            formatDownloadBytes(total), formatDownloadBytes(bytesPerSecond)));
+                                    if (checkpointDownloadView != null) {
+                                        checkpointDownloadView.setText(String.format(Locale.US,
+                                                "正在下载：%s\n%s / %s · %s/s",
+                                                source.label, formatDownloadBytes(downloaded),
+                                                formatDownloadBytes(total), formatDownloadBytes(bytesPerSecond)));
+                                    }
+                                }));
+                runOnUiThread(() -> {
+                    checkpointDownloading = false;
+                    progressBar.setProgress(100);
+                    statusView.setText((result.fromCache ? "已存在" : "下载完成")
+                            + " · SHA-256 PASS · " + result.source.label);
+                    refreshBackendStatus();
+                    applyUiState();
+                });
+            } catch (MobileI2VCheckpointDownloader.CancelledException cancelled) {
+                runOnUiThread(() -> {
+                    checkpointDownloading = false;
+                    statusView.setText("下载已取消 · 已保留断点，可从任一路径继续");
+                    refreshBackendStatus();
+                    applyUiState();
+                });
+            } catch (Throwable error) {
+                String diag = "Local Video Lab V0.6 · MobileI2V checkpoint download\n"
+                        + source.label + "\n" + error.getClass().getName() + "\n" + safeMessage(error);
+                runOnUiThread(() -> {
+                    checkpointDownloading = false;
+                    lastDiagnostics = diag;
+                    metricsView.setText(diag);
+                    diagnosticsButton.setVisibility(View.VISIBLE);
+                    statusView.setText("下载失败 · " + source.label + " · " + safeMessage(error));
+                    refreshBackendStatus();
+                    applyUiState();
+                });
+            }
+        });
+    }
+
+    private void cancelCheckpointDownload() {
+        if (checkpointDownloader != null) checkpointDownloader.cancel();
+    }
+
+    private String formatDownloadBytes(long bytes) {
+        if (bytes <= 0L) return "0 B";
+        if (bytes >= 1073741824L) return String.format(Locale.US, "%.2f GB", bytes / 1073741824.0);
+        if (bytes >= 1048576L) return String.format(Locale.US, "%.1f MB", bytes / 1048576.0);
+        if (bytes >= 1024L) return String.format(Locale.US, "%.1f KB", bytes / 1024.0);
+        return bytes + " B";
+    }
+
     private void pickImage(int requestCode) {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -472,7 +577,7 @@ public final class MainActivityV05 extends Activity {
                     applyUiState();
                 });
             } catch (Throwable error) {
-                String diag = "Local Video Lab V0.5 · model pack install\n"
+                String diag = "Local Video Lab V0.6 · model pack install\n"
                         + error.getClass().getName() + "\n" + safeMessage(error);
                 runOnUiThread(() -> {
                     modelInstalling = false;
@@ -639,6 +744,25 @@ public final class MainActivityV05 extends Activity {
                     emptyAsUnknown(m.sourceRepo), shortCommit(m.sourceCommit),
                     emptyAsUnknown(m.codeLicense), emptyAsUnknown(m.weightsLicense)));
         }
+        if (checkpointDownloadView != null) {
+            long partial = MobileI2VCheckpointDownloader.partialBytes(this);
+            MobileI2VDownloadSource checkpoint = MobileI2VDownloadSource.official();
+            if (MobileI2VCheckpointDownloader.isVerified(this)) {
+                checkpointDownloadView.setText(
+                        "上游原版权重：已下载 · SHA-256 PASS · "
+                                + formatDownloadBytes(checkpoint.expectedBytes)
+                                + "\n可离线保留；原始 .pth 仍需 Android 导出 runtime 才能进入生成门槛。");
+            } else if (partial > 0L) {
+                checkpointDownloadView.setText(
+                        "上游原版权重：断点已保存 · " + formatDownloadBytes(partial)
+                                + " / " + formatDownloadBytes(checkpoint.expectedBytes)
+                                + "\n官方原版与国内镜像可交叉续传，同一 SHA-256 校验。");
+            } else {
+                checkpointDownloadView.setText(
+                        "上游原版权重：未下载 · " + formatDownloadBytes(checkpoint.expectedBytes)
+                                + "\n官方：Hugging Face · 国内：HF-Mirror");
+            }
+        }
         removeModelButton.setVisibility(mobilePack == null ? View.GONE : View.VISIBLE);
         importModelButton.setText(mobilePack == null
                 ? "导入 MobileI2V 模型包 (.mlvpkg)"
@@ -660,7 +784,7 @@ public final class MainActivityV05 extends Activity {
                 lastVideoUri != null);
         BackendRouter.Backend backend = selectedBackend();
         BackendRouter.Decision decision = currentBackendDecision();
-        boolean busy = phase == UiStatePolicy.Phase.GENERATING || modelInstalling;
+        boolean busy = phase == UiStatePolicy.Phase.GENERATING || modelInstalling || checkpointDownloading;
         boolean rife = backend == BackendRouter.Backend.RIFE_MOTION;
         boolean depth = backend == BackendRouter.Backend.DEPTH_RIFE;
         boolean mobile = backend == BackendRouter.Backend.MOBILE_I2V;
@@ -685,6 +809,10 @@ public final class MainActivityV05 extends Activity {
         framesSpinner.setEnabled(!busy);
         fpsSpinner.setEnabled(!busy);
         importModelButton.setEnabled(!busy);
+        downloadOfficialButton.setEnabled(!busy);
+        downloadMirrorButton.setEnabled(!busy);
+        cancelCheckpointDownloadButton.setVisibility(checkpointDownloading ? View.VISIBLE : View.GONE);
+        cancelCheckpointDownloadButton.setEnabled(checkpointDownloading);
         removeModelButton.setEnabled(!busy);
 
         secondaryButton.setVisibility(rife ? View.VISIBLE : View.GONE);
@@ -841,7 +969,7 @@ public final class MainActivityV05 extends Activity {
         if (lastDiagnostics == null || lastDiagnostics.isEmpty()) return;
         Intent intent = new Intent(Intent.ACTION_SEND);
         intent.setType("text/plain");
-        intent.putExtra(Intent.EXTRA_SUBJECT, "Local Video Lab V0.5 diagnostics");
+        intent.putExtra(Intent.EXTRA_SUBJECT, "Local Video Lab V0.6 diagnostics");
         intent.putExtra(Intent.EXTRA_TEXT, lastDiagnostics);
         startActivity(Intent.createChooser(intent, "导出诊断信息"));
     }
@@ -859,7 +987,7 @@ public final class MainActivityV05 extends Activity {
                 ? String.format(Locale.US, "\n估深预处理: %.2f s", result.preprocessingMs / 1000.0)
                 : "";
         return String.format(Locale.US,
-                "Local Video Lab V0.5\n"
+                "Local Video Lab V0.6\n"
                         + "后端: %s\n"
                         + "模式: %s\n"
                         + "输出: %dx%d · %d 帧 · %d FPS\n"
@@ -879,7 +1007,7 @@ public final class MainActivityV05 extends Activity {
 
     private String formatError(Throwable error) {
         return String.format(Locale.US,
-                "Local Video Lab V0.5\n"
+                "Local Video Lab V0.6\n"
                         + "状态: 生成失败\n"
                         + "后端: %s\n"
                         + "异常: %s\n"
