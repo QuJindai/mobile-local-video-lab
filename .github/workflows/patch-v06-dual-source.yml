@@ -1,0 +1,112 @@
+name: Patch V0.6 dual-source model download
+
+on:
+  push:
+    branches:
+      - feat/v04-model-backends
+    paths:
+      - .github/workflows/patch-v06-dual-source.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v5
+        with:
+          ref: feat/v04-model-backends
+
+      - name: Patch V0.6 UI and build contract
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected one match, got {count}')
+              return text.replace(old, new, 1)
+
+          p = Path('app/src/main/java/com/qujindai/localvideo/MainActivityV05.java')
+          text = p.read_text(encoding='utf-8')
+          text = text.replace('V0.5 handset workbench.', 'V0.6 handset workbench.', 1)
+          text = replace_once(text,
+              '    private boolean modelInstalling;\n    private boolean detailsExpanded;',
+              '    private boolean modelInstalling;\n    private boolean checkpointDownloading;\n    private MobileI2VCheckpointDownloader checkpointDownloader;\n    private boolean detailsExpanded;',
+              'state fields')
+          text = replace_once(text,
+              '    private TextView mobilePackView;\n    private TextView deviceView;',
+              '    private TextView mobilePackView;\n    private TextView checkpointDownloadView;\n    private TextView deviceView;',
+              'text fields')
+          text = replace_once(text,
+              '    private Button importModelButton;\n    private Button removeModelButton;',
+              '    private Button importModelButton;\n    private Button downloadOfficialButton;\n    private Button downloadMirrorButton;\n    private Button cancelCheckpointDownloadButton;\n    private Button removeModelButton;',
+              'button fields')
+          text = text.replace('TextView badge = text("V0.5", 12, true);', 'TextView badge = text("V0.6", 12, true);', 1)
+          text = replace_once(text,
+              '                "完全离线 · 三后端工作台\\n"\n                        + "RIFE 已验收 · Depth Anything V2 Q4 + RIFE 真实估深 3D · MobileI2V 语义 I2V 部署中",',
+              '                "生成完全离线 · 模型支持双源下载\\n"\n                        + "RIFE 已验收 · Depth Anything V2 Q4 + RIFE 真实估深 3D · MobileI2V 语义 I2V 部署中",',
+              'subtitle')
+
+          anchor = '''        mobilePackView = text("", 12, false);\n        mobilePackView.setTextColor(COLOR_MUTED);\n        card.addView(mobilePackView);\n\n        importModelButton = secondaryAction("导入 MobileI2V 模型包 (.mlvpkg)");'''
+          inserted = '''        mobilePackView = text("", 12, false);\n        mobilePackView.setTextColor(COLOR_MUTED);\n        card.addView(mobilePackView);\n\n        card.addView(label("MobileI2V 上游权重下载"));\n        checkpointDownloadView = text("", 12, false);\n        checkpointDownloadView.setTextColor(COLOR_MUTED);\n        card.addView(checkpointDownloadView);\n\n        LinearLayout downloadRow = new LinearLayout(this);\n        downloadRow.setOrientation(LinearLayout.HORIZONTAL);\n        downloadOfficialButton = secondaryAction("下载 · 官方原版");\n        downloadMirrorButton = secondaryAction("下载 · 国内镜像");\n        downloadOfficialButton.setOnClickListener(v ->\n                startCheckpointDownload(MobileI2VDownloadSource.official()));\n        downloadMirrorButton.setOnClickListener(v ->\n                startCheckpointDownload(MobileI2VDownloadSource.chinaMirror()));\n        downloadRow.addView(downloadOfficialButton, weightedButtonParams(1f, 0));\n        downloadRow.addView(downloadMirrorButton, weightedButtonParams(1f, dp(8)));\n        card.addView(downloadRow);\n\n        cancelCheckpointDownloadButton = textAction("取消下载 · 保留断点");\n        cancelCheckpointDownloadButton.setVisibility(View.GONE);\n        cancelCheckpointDownloadButton.setOnClickListener(v -> cancelCheckpointDownload());\n        card.addView(cancelCheckpointDownloadButton);\n\n        TextView downloadNote = text(\n                "两条路径锁定同一 upstream checkpoint 与 SHA-256。下载的是原始 hybrid_371.pth；"\n                        + "它用于后续 Android 导出/转换，不会被冒充为可执行 .mlvpkg。",\n                12, false);\n        downloadNote.setTextColor(COLOR_WARNING);\n        card.addView(downloadNote);\n\n        importModelButton = secondaryAction("导入 MobileI2V 模型包 (.mlvpkg)");'''
+          text = replace_once(text, anchor, inserted, 'model download UI')
+
+          method_anchor = '    private void pickImage(int requestCode) {'
+          methods = '''    private void startCheckpointDownload(MobileI2VDownloadSource source) {\n        if (checkpointDownloading || modelInstalling || phase == UiStatePolicy.Phase.GENERATING) return;\n        checkpointDownloading = true;\n        checkpointDownloader = new MobileI2VCheckpointDownloader();\n        progressBar.setProgress(CheckpointDownloadPolicy.percent(\n                MobileI2VCheckpointDownloader.partialBytes(this), source.expectedBytes));\n        statusView.setText("准备下载 · " + source.label);\n        refreshBackendStatus();\n        applyUiState();\n\n        worker.submit(() -> {\n            try {\n                MobileI2VCheckpointDownloader.Result result = checkpointDownloader.download(\n                        this, source, (percent, downloaded, total, bytesPerSecond, message) ->\n                                runOnUiThread(() -> {\n                                    progressBar.setProgress(percent);\n                                    statusView.setText(String.format(Locale.US,\n                                            "%d%% · %s · %s / %s · %s/s",\n                                            percent, message, formatDownloadBytes(downloaded),\n                                            formatDownloadBytes(total), formatDownloadBytes(bytesPerSecond)));\n                                    if (checkpointDownloadView != null) {\n                                        checkpointDownloadView.setText(String.format(Locale.US,\n                                                "正在下载：%s\\n%s / %s · %s/s",\n                                                source.label, formatDownloadBytes(downloaded),\n                                                formatDownloadBytes(total), formatDownloadBytes(bytesPerSecond)));\n                                    }\n                                }));\n                runOnUiThread(() -> {\n                    checkpointDownloading = false;\n                    progressBar.setProgress(100);\n                    statusView.setText((result.fromCache ? "已存在" : "下载完成")\n                            + " · SHA-256 PASS · " + result.source.label);\n                    refreshBackendStatus();\n                    applyUiState();\n                });\n            } catch (MobileI2VCheckpointDownloader.CancelledException cancelled) {\n                runOnUiThread(() -> {\n                    checkpointDownloading = false;\n                    statusView.setText("下载已取消 · 已保留断点，可从任一路径继续");\n                    refreshBackendStatus();\n                    applyUiState();\n                });\n            } catch (Throwable error) {\n                String diag = "Local Video Lab V0.6 · MobileI2V checkpoint download\\n"\n                        + source.label + "\\n" + error.getClass().getName() + "\\n" + safeMessage(error);\n                runOnUiThread(() -> {\n                    checkpointDownloading = false;\n                    lastDiagnostics = diag;\n                    metricsView.setText(diag);\n                    diagnosticsButton.setVisibility(View.VISIBLE);\n                    statusView.setText("下载失败 · " + source.label + " · " + safeMessage(error));\n                    refreshBackendStatus();\n                    applyUiState();\n                });\n            }\n        });\n    }\n\n    private void cancelCheckpointDownload() {\n        if (checkpointDownloader != null) checkpointDownloader.cancel();\n    }\n\n    private String formatDownloadBytes(long bytes) {\n        if (bytes <= 0L) return "0 B";\n        if (bytes >= 1073741824L) return String.format(Locale.US, "%.2f GB", bytes / 1073741824.0);\n        if (bytes >= 1048576L) return String.format(Locale.US, "%.1f MB", bytes / 1048576.0);\n        if (bytes >= 1024L) return String.format(Locale.US, "%.1f KB", bytes / 1024.0);\n        return bytes + " B";\n    }\n\n'''
+          text = replace_once(text, method_anchor, methods + method_anchor, 'download methods')
+
+          refresh_anchor = '''        removeModelButton.setVisibility(mobilePack == null ? View.GONE : View.VISIBLE);\n        importModelButton.setText(mobilePack == null'''
+          refresh_insert = '''        if (checkpointDownloadView != null) {\n            long partial = MobileI2VCheckpointDownloader.partialBytes(this);\n            MobileI2VDownloadSource checkpoint = MobileI2VDownloadSource.official();\n            if (MobileI2VCheckpointDownloader.isVerified(this)) {\n                checkpointDownloadView.setText(\n                        "上游原版权重：已下载 · SHA-256 PASS · "\n                                + formatDownloadBytes(checkpoint.expectedBytes)\n                                + "\\n可离线保留；原始 .pth 仍需 Android 导出 runtime 才能进入生成门槛。");\n            } else if (partial > 0L) {\n                checkpointDownloadView.setText(\n                        "上游原版权重：断点已保存 · " + formatDownloadBytes(partial)\n                                + " / " + formatDownloadBytes(checkpoint.expectedBytes)\n                                + "\\n官方原版与国内镜像可交叉续传，同一 SHA-256 校验。");\n            } else {\n                checkpointDownloadView.setText(\n                        "上游原版权重：未下载 · " + formatDownloadBytes(checkpoint.expectedBytes)\n                                + "\\n官方：Hugging Face · 国内：HF-Mirror");\n            }\n        }\n        removeModelButton.setVisibility(mobilePack == null ? View.GONE : View.VISIBLE);\n        importModelButton.setText(mobilePack == null'''
+          text = replace_once(text, refresh_anchor, refresh_insert, 'download status refresh')
+
+          text = replace_once(text,
+              '        boolean busy = phase == UiStatePolicy.Phase.GENERATING || modelInstalling;',
+              '        boolean busy = phase == UiStatePolicy.Phase.GENERATING || modelInstalling || checkpointDownloading;',
+              'busy state')
+          state_anchor = '''        importModelButton.setEnabled(!busy);\n        removeModelButton.setEnabled(!busy);'''
+          state_insert = '''        importModelButton.setEnabled(!busy);\n        downloadOfficialButton.setEnabled(!busy);\n        downloadMirrorButton.setEnabled(!busy);\n        cancelCheckpointDownloadButton.setVisibility(checkpointDownloading ? View.VISIBLE : View.GONE);\n        cancelCheckpointDownloadButton.setEnabled(checkpointDownloading);\n        removeModelButton.setEnabled(!busy);'''
+          text = replace_once(text, state_anchor, state_insert, 'download UI state')
+          text = text.replace('Local Video Lab V0.5', 'Local Video Lab V0.6')
+          p.write_text(text, encoding='utf-8')
+
+          manifest = Path('app/src/main/AndroidManifest.xml')
+          mt = manifest.read_text(encoding='utf-8')
+          mt = replace_once(mt,
+              '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n',
+              '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    <uses-permission android:name="android.permission.INTERNET" />\n',
+              'internet permission')
+          manifest.write_text(mt, encoding='utf-8')
+
+          gradle = Path('app/build.gradle')
+          gt = gradle.read_text(encoding='utf-8')
+          gt = replace_once(gt, '        versionCode 5\n        versionName \'0.5.0\'',
+                            '        versionCode 6\n        versionName \'0.6.0\'', 'app version')
+          gradle.write_text(gt, encoding='utf-8')
+
+          workflow = Path('.github/workflows/android-apk.yml')
+          wt = workflow.read_text(encoding='utf-8')
+          pack_step = '''      - name: Test deterministic MobileI2V model packs\n        run: |\n          cd tools/mobilei2v\n          python3 test_model_pack.py\n\n'''
+          verify_step = pack_step + '''      - name: Verify MobileI2V dual-source download contract\n        shell: bash\n        run: |\n          grep -q 'https://huggingface.co' app/src/main/java/com/qujindai/localvideo/MobileI2VDownloadSource.java\n          grep -q 'https://hf-mirror.com' app/src/main/java/com/qujindai/localvideo/MobileI2VDownloadSource.java\n          grep -q '290b2d0dfa93c65388b93e3f7591d7328b335e65' app/src/main/java/com/qujindai/localvideo/MobileI2VDownloadSource.java\n          grep -q 'bc6a545302b342b87d83a4d78e9b74d47ca59fbf908fd8e13d9ecedbe1a37f2d' app/src/main/java/com/qujindai/localvideo/MobileI2VDownloadSource.java\n          grep -q 'android.permission.INTERNET' app/src/main/AndroidManifest.xml\n\n'''
+          wt = replace_once(wt, pack_step, verify_step, 'dual-source CI step')
+          wt = wt.replace('Verify V0.5 APK runtime, models, launcher and signing',
+                          'Verify V0.6 APK runtime, models, launcher and signing')
+          wt = wt.replace("grep \"versionCode='5'\" apk-badging.txt", "grep \"versionCode='6'\" apk-badging.txt")
+          wt = wt.replace("grep \"versionName='0.5.0'\" apk-badging.txt", "grep \"versionName='0.6.0'\" apk-badging.txt")
+          wt = wt.replace('name: mobile-local-video-v0.5-apk', 'name: mobile-local-video-v0.6-apk')
+          workflow.write_text(wt, encoding='utf-8')
+          PY
+
+      - name: Commit feature patch
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/java/com/qujindai/localvideo/MainActivityV05.java app/src/main/AndroidManifest.xml app/build.gradle .github/workflows/android-apk.yml
+          git diff --cached --check
+          git commit -m 'feat: add dual-source MobileI2V checkpoint download UI'
+          git push origin HEAD:feat/v04-model-backends
