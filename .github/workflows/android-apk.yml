@@ -64,6 +64,30 @@ jobs:
             exit 1
           fi
 
+      - name: Verify V0.7 MobileI2V full GPU generation contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          MAIN=app/src/main/java/com/qujindai/localvideo/MainActivityV05.java
+          ENGINE=app/src/main/java/com/qujindai/localvideo/MobileI2VGpuEngine.java
+          NATIVE=app/src/main/cpp/mobilei2v/mobilei2v_jni.cpp
+          grep -q 'V0.7' "$MAIN"
+          grep -q 'MobileI2VGpuEngine mobileEngine' "$MAIN"
+          grep -q '开始 MobileI2V GPU 生成' "$MAIN"
+          if grep -q '&& !mobile' "$MAIN"; then echo 'MobileI2V button is still force-disabled' >&2; exit 1; fi
+          if grep -q 'MobileI2V 语义 I2V 部署中' "$MAIN"; then echo 'stale deployment placeholder' >&2; exit 1; fi
+          grep -q 'session.encode' "$ENGINE"
+          grep -q 'MobileI2VFlowEuler.sample' "$ENGINE"
+          grep -q 'session.runDenoiser' "$ENGINE"
+          grep -q 'session.decode' "$ENGINE"
+          grep -q 'Mp4Encoder.encode' "$ENGINE"
+          grep -q 'MediaStorePublisher.publish' "$ENGINE"
+          grep -q 'cpuProductionPathUsed' app/src/main/java/com/qujindai/localvideo/MobileI2VMicroscope.java
+          if grep -q 'RifeEngine' "$ENGINE"; then echo 'RIFE must not appear in MobileI2V engine' >&2; exit 1; fi
+          grep -q 'vae_encoder.mnn' "$NATIVE"
+          grep -q 'denoiser.mnn' "$NATIVE"
+          grep -q 'vae_decoder.mnn' "$NATIVE"
+
       - name: Fetch pinned Depth Anything V2 Q4 model
         shell: bash
         run: |
@@ -168,7 +192,7 @@ jobs:
       - name: Assemble debug APK
         run: gradle :app:assembleDebug --stacktrace
 
-      - name: Verify V0.6 APK runtime, models, launcher and signing
+      - name: Verify V0.7 APK runtime, models, launcher and signing
         shell: bash
         run: |
           set -euo pipefail
@@ -184,8 +208,8 @@ jobs:
             = '5d55b02762e1907589158af3e366bd61ddf648155852a07bbf5e3a074639fcf8'
 
           "$ANDROID_SDK_ROOT/build-tools/35.0.0/aapt" dump badging "$APK" | tee apk-badging.txt
-          grep "versionCode='6'" apk-badging.txt
-          grep "versionName='0.6.0'" apk-badging.txt
+          grep "versionCode='7'" apk-badging.txt
+          grep "versionName='0.7.0'" apk-badging.txt
           grep "launchable-activity: name='com.qujindai.localvideo.MainActivityV05'" apk-badging.txt
 
           "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee apk-signing.txt
@@ -219,7 +243,7 @@ jobs:
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: mobile-local-video-v0.6-gpu-runtime-apk
+          name: mobile-local-video-v0.7-mobilei2v-gpu-apk
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             apk-sha256.txt
