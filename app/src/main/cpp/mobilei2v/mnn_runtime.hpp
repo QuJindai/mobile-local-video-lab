@@ -54,7 +54,7 @@ struct OpenClSession {
     explicit operator bool() const { return interpreter && session; }
 };
 
-// Production MobileI2V never creates MNN_FORWARD_CPU sessions. If the OpenCL
+// Production MobileI2V creates accelerator sessions only. If the OpenCL
 // backend cannot be created, readiness fails and Java keeps the model NOT READY.
 inline OpenClSession createOpenClSession(
         const std::string& modelPath,
