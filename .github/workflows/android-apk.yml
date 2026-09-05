@@ -15,7 +15,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 75
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -44,6 +44,25 @@ jobs:
           grep -q '290b2d0dfa93c65388b93e3f7591d7328b335e65' app/src/main/java/com/qujindai/localvideo/MobileI2VDownloadSource.java
           grep -q 'bc6a545302b342b87d83a4d78e9b74d47ca59fbf908fd8e13d9ecedbe1a37f2d' app/src/main/java/com/qujindai/localvideo/MobileI2VDownloadSource.java
           grep -q 'android.permission.INTERNET' app/src/main/AndroidManifest.xml
+
+      - name: Verify MobileI2V GPU source contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s scripts/prepare_mobilei2v_gpu_runtime.sh
+          test -s app/src/main/cpp/mobilei2v/CMakeLists.txt
+          test -s app/src/main/cpp/mobilei2v/mnn_runtime.hpp
+          test -s app/src/main/cpp/mobilei2v/mobilei2v_jni.cpp
+          test -s app/src/main/java/com/qujindai/localvideo/MobileI2VGpuNative.java
+          grep -q '3db3cc904dfea55286972b472b040ad5525aa083' scripts/prepare_mobilei2v_gpu_runtime.sh
+          grep -q 'MNN_OPENCL=ON' scripts/prepare_mobilei2v_gpu_runtime.sh
+          grep -q 'MNN_FORWARD_OPENCL' app/src/main/cpp/mobilei2v/mnn_runtime.hpp
+          grep -q 'MNN_GPU_MEMORY_BUFFER' app/src/main/cpp/mobilei2v/mnn_runtime.hpp
+          grep -q 'MNN_GPU_TUNING_FAST' app/src/main/cpp/mobilei2v/mnn_runtime.hpp
+          if grep -q 'MNN_FORWARD_CPU' app/src/main/cpp/mobilei2v/mnn_runtime.hpp; then
+            echo 'MobileI2V production runtime contains a forbidden CPU backend token' >&2
+            exit 1
+          fi
 
       - name: Fetch pinned Depth Anything V2 Q4 model
         shell: bash
@@ -101,6 +120,28 @@ jobs:
       - name: Run JVM unit tests
         run: gradle :app:testDebugUnitTest --stacktrace
 
+      - name: Build Dream-derived MobileI2V MNN OpenCL runtime
+        shell: bash
+        run: bash scripts/prepare_mobilei2v_gpu_runtime.sh
+
+      - name: Verify MobileI2V GPU runtime payload and ELF alignment
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s app/src/main/jniLibs/arm64-v8a/libmobilei2v_gpu.so
+          READELF="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          "$READELF" -h app/src/main/jniLibs/arm64-v8a/libmobilei2v_gpu.so
+          "$READELF" -lW app/src/main/jniLibs/arm64-v8a/libmobilei2v_gpu.so | tee mobilei2v-gpu-elf.txt
+          python3 - <<'PY'
+          import re
+          text=open('mobilei2v-gpu-elf.txt', encoding='utf-8').read().splitlines()
+          aligns=[int(line.split()[-1],16) for line in text if re.match(r'\s*LOAD\s', line)]
+          if not aligns or min(aligns) < 0x4000:
+              raise SystemExit(f'MobileI2V GPU 16KB page-size gate failed: {aligns}')
+          print('MobileI2V GPU 16KB page-size gate PASS:', aligns)
+          PY
+          sha256sum app/src/main/jniLibs/arm64-v8a/libmobilei2v_gpu.so
+
       - name: Build packaged RIFE ncnn Vulkan runtime
         run: bash scripts/prepare_rife_runtime.sh
 
@@ -133,6 +174,7 @@ jobs:
           set -euo pipefail
           APK=app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
+          unzip -l "$APK" | grep 'lib/arm64-v8a/libmobilei2v_gpu.so'
           unzip -l "$APK" | grep 'lib/arm64-v8a/librife.so'
           unzip -l "$APK" | grep 'assets/models/rife-v4.6/flownet.bin'
           unzip -l "$APK" | grep 'assets/models/depth-anything-v2/model_q4.onnx'
@@ -177,7 +219,7 @@ jobs:
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: mobile-local-video-v0.6-apk
+          name: mobile-local-video-v0.6-gpu-runtime-apk
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             apk-sha256.txt
