@@ -34,7 +34,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * V0.6 handset workbench.
+ * V0.7 handset workbench.
  *
  * RIFE is the validated baseline, Depth 3D is a genuine second local model path,
  * and MobileI2V remains blocked until its actual Android execution loop exists.
@@ -63,6 +63,8 @@ public final class MainActivityV05 extends Activity {
     private DeviceCapabilitySnapshot capabilities;
     private OnnxRuntimeFoundation.Status onnxStatus;
     private String lastDiagnostics = "";
+    private volatile MobileI2VGpuNative.Probe mobileGpuProbe;
+    private MobileI2VMicroscope lastMobileMicroscope;
     private boolean modelInstalling;
     private boolean checkpointDownloading;
     private MobileI2VCheckpointDownloader checkpointDownloader;
@@ -128,6 +130,7 @@ public final class MainActivityV05 extends Activity {
         refreshBackendStatus();
         updateMetrics("待机");
         applyUiState();
+        if (mobilePack != null) scheduleMobileProbe(mobilePack);
     }
 
     private View buildUi() {
@@ -145,7 +148,7 @@ public final class MainActivityV05 extends Activity {
         TextView title = text("Local Video Lab", 25, true);
         titleRow.addView(title, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        TextView badge = text("V0.6", 12, true);
+        TextView badge = text("V0.7", 12, true);
         badge.setTextColor(Color.WHITE);
         badge.setGravity(Gravity.CENTER);
         badge.setBackground(rounded(COLOR_ACCENT, 20));
@@ -154,8 +157,8 @@ public final class MainActivityV05 extends Activity {
         root.addView(titleRow);
 
         TextView subtitle = text(
-                "生成完全离线 · 模型支持双源下载\n"
-                        + "RIFE 已验收 · Depth Anything V2 Q4 + RIFE 真实估深 3D · MobileI2V 语义 I2V 部署中",
+                "端侧生成 · 模型支持双源下载\n"
+                        + "RIFE · Depth 3D · MobileI2V Adreno GPU / MNN OpenCL",
                 14, false);
         subtitle.setTextColor(COLOR_MUTED);
         root.addView(subtitle);
@@ -212,7 +215,7 @@ public final class MainActivityV05 extends Activity {
         backendSpinner = spinner(new String[] {
                 "RIFE Motion · 稳定已验收",
                 "Depth 3D Motion · Depth Anything V2 Q4 + RIFE",
-                "MobileI2V 0.27B · 语义 I2V 部署实验"
+                "MobileI2V 0.27B · Adreno GPU / MNN OpenCL"
         }, 1);
         card.addView(backendSpinner);
 
@@ -470,7 +473,7 @@ public final class MainActivityV05 extends Activity {
                     applyUiState();
                 });
             } catch (Throwable error) {
-                String diag = "Local Video Lab V0.6 · MobileI2V checkpoint download\n"
+                String diag = "Local Video Lab V0.7 · MobileI2V checkpoint download\n"
                         + source.label + "\n" + error.getClass().getName() + "\n" + safeMessage(error);
                 runOnUiThread(() -> {
                     checkpointDownloading = false;
@@ -570,6 +573,8 @@ public final class MainActivityV05 extends Activity {
                 modelPackStore.activate(installed);
                 runOnUiThread(() -> {
                     mobilePack = installed;
+                    mobileGpuProbe = null;
+                    scheduleMobileProbe(installed);
                     modelInstalling = false;
                     progressBar.setProgress(100);
                     statusView.setText("MobileI2V 模型包已完成 SHA-256 校验并安装。 ");
@@ -577,7 +582,7 @@ public final class MainActivityV05 extends Activity {
                     applyUiState();
                 });
             } catch (Throwable error) {
-                String diag = "Local Video Lab V0.6 · model pack install\n"
+                String diag = "Local Video Lab V0.7 · model pack install\n"
                         + error.getClass().getName() + "\n" + safeMessage(error);
                 runOnUiThread(() -> {
                     modelInstalling = false;
@@ -596,6 +601,7 @@ public final class MainActivityV05 extends Activity {
         if (modelInstalling || phase == UiStatePolicy.Phase.GENERATING) return;
         modelPackStore.removeMobileI2V();
         mobilePack = null;
+        mobileGpuProbe = null;
         statusView.setText("MobileI2V 模型包已移除。 ");
         refreshBackendStatus();
         applyUiState();
@@ -615,7 +621,9 @@ public final class MainActivityV05 extends Activity {
             return;
         }
 
-        final int frames = framesSpinner.getSelectedItemPosition() == 0 ? 9 : 17;
+        final int frames = backend == BackendRouter.Backend.MOBILE_I2V
+                ? MobileI2VGpuNative.OUTPUT_FRAMES
+                : (framesSpinner.getSelectedItemPosition() == 0 ? 9 : 17);
         final int fps;
         switch (fpsSpinner.getSelectedItemPosition()) {
             case 0: fps = 6; break;
@@ -634,35 +642,51 @@ public final class MainActivityV05 extends Activity {
 
         worker.submit(() -> {
             try {
+                if (backend == BackendRouter.Backend.MOBILE_I2V) {
+                    MobileI2VGpuEngine mobileEngine = new MobileI2VGpuEngine(this);
+                    MobileI2VGpuEngine.Result mobileResult = mobileEngine.generate(
+                            primaryUri, mobilePack, fps,
+                            (percent, message) -> publishProgress(percent, message));
+                    long durationMs = Math.max(1L,
+                            mobileResult.frames * 1000L / Math.max(1, mobileResult.fps));
+                    ResultRecord record = new ResultRecord(
+                            mobileResult.uri.toString(), System.currentTimeMillis(), durationMs,
+                            mobileResult.width, mobileResult.height,
+                            mobileResult.frames, mobileResult.fps);
+                    lastRecord = record;
+                    lastVideoUri = mobileResult.uri;
+                    historyStore.record(record);
+                    lastMobileMicroscope = mobileResult.microscope;
+                    lastDiagnostics = mobileResult.microscope.format();
+                    runOnUiThread(() -> {
+                        phase = UiStatePolicy.Phase.SUCCESS;
+                        progressBar.setProgress(100);
+                        statusView.setText("100% · MobileI2V GPU 已保存到 Movies/LocalVideoLab");
+                        metricsView.setText(lastDiagnostics);
+                        showResult(record, true);
+                        refreshHistory();
+                        applyUiState();
+                    });
+                    return;
+                }
+
                 RifeEngine engine = new RifeEngine(this);
                 RifeEngine.Result result;
                 if (backend == BackendRouter.Backend.DEPTH_RIFE) {
                     result = engine.generateDepthMotion(
-                            primaryUri,
-                            frames,
-                            fps,
-                            depthPreset,
+                            primaryUri, frames, fps, depthPreset,
                             (percent, message) -> publishProgress(percent, message));
                 } else {
                     result = engine.generate(
-                            primaryUri,
-                            secondaryUri,
-                            frames,
-                            fps,
-                            rifePreset,
+                            primaryUri, secondaryUri, frames, fps, rifePreset,
                             (percent, message) -> publishProgress(percent, message));
                 }
 
                 int thermalAfter = thermalStatus();
                 long durationMs = Math.max(1L, result.frames * 1000L / Math.max(1, result.fps));
                 ResultRecord record = new ResultRecord(
-                        result.uri.toString(),
-                        System.currentTimeMillis(),
-                        durationMs,
-                        result.width,
-                        result.height,
-                        result.frames,
-                        result.fps);
+                        result.uri.toString(), System.currentTimeMillis(), durationMs,
+                        result.width, result.height, result.frames, result.fps);
                 lastRecord = record;
                 lastVideoUri = result.uri;
                 historyStore.record(record);
@@ -707,18 +731,51 @@ public final class MainActivityV05 extends Activity {
         return BackendRouter.Backend.RIFE_MOTION;
     }
 
+    private void scheduleMobileProbe(InstalledModelPack pack) {
+        mobileGpuProbe = null;
+        if (pack == null || !pack.isAcceleratedMobileI2V()) return;
+        worker.submit(() -> {
+            MobileI2VGpuNative.Probe probe = MobileI2VGpuNative.probe(pack);
+            runOnUiThread(() -> {
+                if (mobilePack == pack) {
+                    mobileGpuProbe = probe;
+                    refreshBackendStatus();
+                    applyUiState();
+                }
+            });
+        });
+    }
+
     private BackendRouter.Decision currentBackendDecision() {
+        BackendRouter.Backend backend = selectedBackend();
+        if (backend == BackendRouter.Backend.MOBILE_I2V) {
+            if (mobilePack == null || !mobilePack.isAcceleratedMobileI2V()) {
+                return new BackendRouter.Decision(backend, false,
+                        BackendRouter.Blocker.MODEL_PACK_MISSING,
+                        "未安装可执行 MobileI2V GPU 模型包 (.mlvpkg)");
+            }
+            long ram = capabilities == null ? 0 : capabilities.totalRamMb;
+            if (ram > 0 && ram < 8192) {
+                return new BackendRouter.Decision(backend, false,
+                        BackendRouter.Blocker.INSUFFICIENT_RAM,
+                        "设备内存低于 MobileI2V 最低门槛 8 GB");
+            }
+            MobileI2VGpuNative.Probe probe = mobileGpuProbe;
+            if (probe == null) {
+                return new BackendRouter.Decision(backend, false,
+                        BackendRouter.Blocker.RUNTIME_PENDING,
+                        "MobileI2V GPU runtime 正在探测");
+            }
+            return new BackendRouter.Decision(backend, probe.openClReady,
+                    probe.openClReady ? BackendRouter.Blocker.NONE : BackendRouter.Blocker.RUNTIME_PENDING,
+                    probe.openClReady
+                            ? "MobileI2V · Adreno GPU · MNN OpenCL 已就绪"
+                            : probe.message);
+        }
         boolean ortReady = onnxStatus != null && onnxStatus.jniLoaded;
         boolean depthReady = ortReady && DepthRuntimeBundle.isPackaged(this);
-        boolean mobileRuntimeReady = ortReady
-                && onnxStatus.mobileI2vExecutionImplemented;
-        return BackendRouter.resolve(
-                selectedBackend(),
-                true,
-                depthReady,
-                mobilePack != null,
-                mobileRuntimeReady,
-                capabilities == null ? 0 : capabilities.totalRamMb);
+        return BackendRouter.resolve(backend, true, depthReady,
+                false, false, capabilities == null ? 0 : capabilities.totalRamMb);
     }
 
     private void refreshBackendStatus() {
@@ -772,7 +829,9 @@ public final class MainActivityV05 extends Activity {
         deviceView.setText((capabilities == null ? "设备能力：未探测" : capabilities.summary())
                 + "\nDepth Anything V2 Q4 asset: "
                 + (DepthRuntimeBundle.isPackaged(this) ? "PACKAGED" : "MISSING")
-                + "\n" + runtime);
+                + "\n" + runtime
+                + "\nMobileI2V GPU: "
+                + (mobileGpuProbe == null ? "PENDING" : mobileGpuProbe.message));
     }
 
     private void applyUiState() {
@@ -799,14 +858,14 @@ public final class MainActivityV05 extends Activity {
             modeLabel.setText("Depth Anything V2 Q4 + RIFE · 深度 3D 运动");
             generateButton.setText(phase == UiStatePolicy.Phase.GENERATING ? "Depth 3D 生成中…" : "开始 Depth 3D 本地生成");
         } else {
-            modeLabel.setText("MobileI2V · 单图语义 I2V");
-            generateButton.setText(decision.ready ? "开始 MobileI2V 语义生成" : "MobileI2V 尚未就绪");
+            modeLabel.setText("MobileI2V · Adreno GPU / MNN OpenCL · 17帧");
+            generateButton.setText(decision.ready ? "开始 MobileI2V GPU 生成" : "MobileI2V GPU 尚未就绪");
         }
 
-        generateButton.setEnabled(primaryUri != null && decision.ready && !busy && !mobile);
+        generateButton.setEnabled(primaryUri != null && decision.ready && !busy);
         primaryButton.setEnabled(!busy);
         backendSpinner.setEnabled(!busy);
-        framesSpinner.setEnabled(!busy);
+        framesSpinner.setEnabled(!busy && !mobile);
         fpsSpinner.setEnabled(!busy);
         importModelButton.setEnabled(!busy);
         downloadOfficialButton.setEnabled(!busy);
@@ -969,7 +1028,7 @@ public final class MainActivityV05 extends Activity {
         if (lastDiagnostics == null || lastDiagnostics.isEmpty()) return;
         Intent intent = new Intent(Intent.ACTION_SEND);
         intent.setType("text/plain");
-        intent.putExtra(Intent.EXTRA_SUBJECT, "Local Video Lab V0.6 diagnostics");
+        intent.putExtra(Intent.EXTRA_SUBJECT, "Local Video Lab V0.7 diagnostics");
         intent.putExtra(Intent.EXTRA_TEXT, lastDiagnostics);
         startActivity(Intent.createChooser(intent, "导出诊断信息"));
     }
@@ -987,7 +1046,7 @@ public final class MainActivityV05 extends Activity {
                 ? String.format(Locale.US, "\n估深预处理: %.2f s", result.preprocessingMs / 1000.0)
                 : "";
         return String.format(Locale.US,
-                "Local Video Lab V0.6\n"
+                "Local Video Lab V0.7\n"
                         + "后端: %s\n"
                         + "模式: %s\n"
                         + "输出: %dx%d · %d 帧 · %d FPS\n"
@@ -1007,7 +1066,7 @@ public final class MainActivityV05 extends Activity {
 
     private String formatError(Throwable error) {
         return String.format(Locale.US,
-                "Local Video Lab V0.6\n"
+                "Local Video Lab V0.7\n"
                         + "状态: 生成失败\n"
                         + "后端: %s\n"
                         + "异常: %s\n"
