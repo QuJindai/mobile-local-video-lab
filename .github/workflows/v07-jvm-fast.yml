@@ -1,0 +1,75 @@
+name: V0.7 JVM Fast Gate
+
+on:
+  push:
+    branches:
+      - feat/v07-mobilei2v-gpu
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'app/src/main/java/**'
+      - 'app/src/test/java/**'
+      - 'app/src/main/cpp/mobilei2v/**'
+      - 'scripts/prepare_mobilei2v_gpu_runtime.sh'
+      - 'tools/mobilei2v/**'
+      - 'app/build.gradle'
+      - '.github/workflows/v07-jvm-fast.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  jvm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Test deterministic accelerated MobileI2V GPU packs
+        run: python3 tools/mobilei2v/test_gpu_pack.py
+
+      - name: Verify Dream-derived GPU runtime source contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s scripts/prepare_mobilei2v_gpu_runtime.sh
+          test -s app/src/main/cpp/mobilei2v/mnn_runtime.hpp
+          test -s app/src/main/cpp/mobilei2v/mobilei2v_jni.cpp
+          test -s app/src/main/java/com/qujindai/localvideo/MobileI2VGpuNative.java
+          grep -q '3db3cc904dfea55286972b472b040ad5525aa083' scripts/prepare_mobilei2v_gpu_runtime.sh
+          grep -q 'MNN_OPENCL=ON' scripts/prepare_mobilei2v_gpu_runtime.sh
+          grep -q 'MNN_FORWARD_OPENCL' app/src/main/cpp/mobilei2v/mnn_runtime.hpp
+          grep -q 'MNN_GPU_MEMORY_BUFFER' app/src/main/cpp/mobilei2v/mnn_runtime.hpp
+          grep -q 'MNN_GPU_TUNING_FAST' app/src/main/cpp/mobilei2v/mnn_runtime.hpp
+          grep -q 'createFromBuffer' app/src/main/cpp/mobilei2v/mnn_runtime.hpp
+          if grep -q 'MNN_FORWARD_CPU' app/src/main/cpp/mobilei2v/mnn_runtime.hpp; then
+            echo 'production runtime must not contain implicit MNN CPU fallback' >&2
+            exit 1
+          fi
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install compile SDK only
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Run JVM tests
+        run: gradle :app:testDebugUnitTest --stacktrace

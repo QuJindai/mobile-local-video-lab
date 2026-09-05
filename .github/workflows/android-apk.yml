@@ -15,7 +15,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 75
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -30,6 +30,98 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+
+      - name: Test deterministic MobileI2V model packs
+        run: |
+          cd tools/mobilei2v
+          python3 test_model_pack.py
+
+      - name: Verify MobileI2V dual-source download contract
+        shell: bash
+        run: |
+          grep -q 'https://huggingface.co' app/src/main/java/com/qujindai/localvideo/MobileI2VDownloadSource.java
+          grep -q 'https://hf-mirror.com' app/src/main/java/com/qujindai/localvideo/MobileI2VDownloadSource.java
+          grep -q '290b2d0dfa93c65388b93e3f7591d7328b335e65' app/src/main/java/com/qujindai/localvideo/MobileI2VDownloadSource.java
+          grep -q 'bc6a545302b342b87d83a4d78e9b74d47ca59fbf908fd8e13d9ecedbe1a37f2d' app/src/main/java/com/qujindai/localvideo/MobileI2VDownloadSource.java
+          grep -q 'android.permission.INTERNET' app/src/main/AndroidManifest.xml
+
+      - name: Verify MobileI2V GPU source contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s scripts/prepare_mobilei2v_gpu_runtime.sh
+          test -s app/src/main/cpp/mobilei2v/CMakeLists.txt
+          test -s app/src/main/cpp/mobilei2v/mnn_runtime.hpp
+          test -s app/src/main/cpp/mobilei2v/mobilei2v_jni.cpp
+          test -s app/src/main/java/com/qujindai/localvideo/MobileI2VGpuNative.java
+          grep -q '3db3cc904dfea55286972b472b040ad5525aa083' scripts/prepare_mobilei2v_gpu_runtime.sh
+          grep -q 'MNN_OPENCL=ON' scripts/prepare_mobilei2v_gpu_runtime.sh
+          grep -q 'MNN_FORWARD_OPENCL' app/src/main/cpp/mobilei2v/mnn_runtime.hpp
+          grep -q 'MNN_GPU_MEMORY_BUFFER' app/src/main/cpp/mobilei2v/mnn_runtime.hpp
+          grep -q 'MNN_GPU_TUNING_FAST' app/src/main/cpp/mobilei2v/mnn_runtime.hpp
+          if grep -q 'MNN_FORWARD_CPU' app/src/main/cpp/mobilei2v/mnn_runtime.hpp; then
+            echo 'MobileI2V production runtime contains a forbidden CPU backend token' >&2
+            exit 1
+          fi
+
+      - name: Verify V0.7 MobileI2V full GPU generation contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          MAIN=app/src/main/java/com/qujindai/localvideo/MainActivityV05.java
+          ENGINE=app/src/main/java/com/qujindai/localvideo/MobileI2VGpuEngine.java
+          NATIVE=app/src/main/cpp/mobilei2v/mobilei2v_jni.cpp
+          grep -q 'V0.7' "$MAIN"
+          grep -q 'MobileI2VGpuEngine mobileEngine' "$MAIN"
+          grep -q '开始 MobileI2V GPU 生成' "$MAIN"
+          if grep -q '&& !mobile' "$MAIN"; then echo 'MobileI2V button is still force-disabled' >&2; exit 1; fi
+          if grep -q 'MobileI2V 语义 I2V 部署中' "$MAIN"; then echo 'stale deployment placeholder' >&2; exit 1; fi
+          grep -q 'session.encode' "$ENGINE"
+          grep -q 'MobileI2VFlowEuler.sample' "$ENGINE"
+          grep -q 'session.runDenoiser' "$ENGINE"
+          grep -q 'session.decode' "$ENGINE"
+          grep -q 'Mp4Encoder.encode' "$ENGINE"
+          grep -q 'MediaStorePublisher.publish' "$ENGINE"
+          grep -q 'cpuProductionPathUsed' app/src/main/java/com/qujindai/localvideo/MobileI2VMicroscope.java
+          if grep -q 'RifeEngine' "$ENGINE"; then echo 'RIFE must not appear in MobileI2V engine' >&2; exit 1; fi
+          grep -q 'vae_encoder.mnn' "$NATIVE"
+          grep -q 'denoiser.mnn' "$NATIVE"
+          grep -q 'vae_decoder.mnn' "$NATIVE"
+
+      - name: Fetch pinned Depth Anything V2 Q4 model
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/main/assets/models/depth-anything-v2
+          curl --fail --location --retry 4 --retry-delay 2 \
+            -o app/src/main/assets/models/depth-anything-v2/model_q4.onnx \
+            'https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/main/onnx/model_q4.onnx?download=true'
+          echo '5d55b02762e1907589158af3e366bd61ddf648155852a07bbf5e3a074639fcf8  app/src/main/assets/models/depth-anything-v2/model_q4.onnx' \
+            | sha256sum -c -
+          ls -lh app/src/main/assets/models/depth-anything-v2/model_q4.onnx
+
+      - name: Host-smoke Depth Anything V2 Q4 ONNX graph
+        shell: bash
+        run: |
+          python3 -m pip install --disable-pip-version-check --quiet 'onnxruntime==1.23.2' numpy
+          python3 - <<'PY'
+          import numpy as np
+          import onnxruntime as ort
+          path='app/src/main/assets/models/depth-anything-v2/model_q4.onnx'
+          session=ort.InferenceSession(path, providers=['CPUExecutionProvider'])
+          inputs=session.get_inputs()
+          outputs=session.get_outputs()
+          if len(inputs) != 1 or not outputs:
+              raise SystemExit(f'unexpected Depth Anything I/O: inputs={len(inputs)} outputs={len(outputs)}')
+          print('input', inputs[0].name, inputs[0].shape, inputs[0].type)
+          print('output', outputs[0].name, outputs[0].shape, outputs[0].type)
+          x=np.zeros((1,3,518,518), dtype=np.float32)
+          y=session.run(None, {inputs[0].name:x})[0]
+          print('smoke output', y.shape, y.dtype, float(np.nanmin(y)), float(np.nanmax(y)))
+          if y.size != 518*518 or not np.isfinite(y).all():
+              raise SystemExit('Depth Anything host smoke failed')
+          print('Depth Anything V2 Q4 host smoke PASS')
+          PY
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -52,10 +144,32 @@ jobs:
       - name: Run JVM unit tests
         run: gradle :app:testDebugUnitTest --stacktrace
 
+      - name: Build Dream-derived MobileI2V MNN OpenCL runtime
+        shell: bash
+        run: bash scripts/prepare_mobilei2v_gpu_runtime.sh
+
+      - name: Verify MobileI2V GPU runtime payload and ELF alignment
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s app/src/main/jniLibs/arm64-v8a/libmobilei2v_gpu.so
+          READELF="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          "$READELF" -h app/src/main/jniLibs/arm64-v8a/libmobilei2v_gpu.so
+          "$READELF" -lW app/src/main/jniLibs/arm64-v8a/libmobilei2v_gpu.so | tee mobilei2v-gpu-elf.txt
+          python3 - <<'PY'
+          import re
+          text=open('mobilei2v-gpu-elf.txt', encoding='utf-8').read().splitlines()
+          aligns=[int(line.split()[-1],16) for line in text if re.match(r'\s*LOAD\s', line)]
+          if not aligns or min(aligns) < 0x4000:
+              raise SystemExit(f'MobileI2V GPU 16KB page-size gate failed: {aligns}')
+          print('MobileI2V GPU 16KB page-size gate PASS:', aligns)
+          PY
+          sha256sum app/src/main/jniLibs/arm64-v8a/libmobilei2v_gpu.so
+
       - name: Build packaged RIFE ncnn Vulkan runtime
         run: bash scripts/prepare_rife_runtime.sh
 
-      - name: Verify runtime payload and ELF alignment
+      - name: Verify RIFE runtime payload and ELF alignment
         shell: bash
         run: |
           test -s app/src/main/jniLibs/arm64-v8a/librife.so
@@ -69,41 +183,73 @@ jobs:
           aligns=[]
           for line in text:
               if re.match(r'\s*LOAD\s', line):
-                  token=line.split()[-1]
-                  aligns.append(int(token, 16))
-          if not aligns:
-              raise SystemExit('No LOAD segments found')
-          if min(aligns) < 0x4000:
-              raise SystemExit(f'16KB page-size gate failed: {aligns}')
-          print('16KB page-size gate PASS:', aligns)
+                  aligns.append(int(line.split()[-1], 16))
+          if not aligns or min(aligns) < 0x4000:
+              raise SystemExit(f'RIFE 16KB page-size gate failed: {aligns}')
+          print('RIFE 16KB page-size gate PASS:', aligns)
           PY
 
       - name: Assemble debug APK
         run: gradle :app:assembleDebug --stacktrace
 
-      - name: Verify APK
+      - name: Verify V0.7 APK runtime, models, launcher and signing
         shell: bash
         run: |
+          set -euo pipefail
           APK=app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
+          unzip -l "$APK" | grep 'lib/arm64-v8a/libmobilei2v_gpu.so'
           unzip -l "$APK" | grep 'lib/arm64-v8a/librife.so'
           unzip -l "$APK" | grep 'assets/models/rife-v4.6/flownet.bin'
+          unzip -l "$APK" | grep 'assets/models/depth-anything-v2/model_q4.onnx'
+          unzip -l "$APK" | grep 'lib/arm64-v8a/libonnxruntime.so'
+          unzip -l "$APK" | grep 'lib/arm64-v8a/libonnxruntime4j_jni.so'
+          test "$(unzip -p "$APK" assets/models/depth-anything-v2/model_q4.onnx | sha256sum | awk '{print $1}')" \
+            = '5d55b02762e1907589158af3e366bd61ddf648155852a07bbf5e3a074639fcf8'
+
           "$ANDROID_SDK_ROOT/build-tools/35.0.0/aapt" dump badging "$APK" | tee apk-badging.txt
-          grep "versionCode='3'" apk-badging.txt
-          grep "versionName='0.3.0'" apk-badging.txt
+          grep "versionCode='7'" apk-badging.txt
+          grep "versionName='0.7.0'" apk-badging.txt
+          grep "launchable-activity: name='com.qujindai.localvideo.MainActivityV05'" apk-badging.txt
+
           "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee apk-signing.txt
           grep -qi 'c9329387060f0259870e30b7bca6b9d9684ed86de716676962a1e75ef7f346ac' apk-signing.txt
+
+          rm -rf apk-native && mkdir -p apk-native
+          unzip -q "$APK" 'lib/arm64-v8a/*.so' -d apk-native
+          READELF="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          python3 - "$READELF" <<'PY'
+          import pathlib, re, subprocess, sys
+          readelf=sys.argv[1]
+          failures=[]
+          libs=sorted(pathlib.Path('apk-native/lib/arm64-v8a').glob('*.so'))
+          if not libs:
+              raise SystemExit('no arm64 native libraries in APK')
+          for lib in libs:
+              text=subprocess.check_output([readelf, '-lW', str(lib)], text=True)
+              aligns=[]
+              for line in text.splitlines():
+                  if re.match(r'\s*LOAD\s', line):
+                      aligns.append(int(line.split()[-1], 16))
+              if not aligns or min(aligns) < 0x4000:
+                  failures.append((lib.name, aligns))
+              else:
+                  print('16KB PASS', lib.name, aligns)
+          if failures:
+              raise SystemExit(f'APK 16KB ELF gate failed: {failures}')
+          PY
           sha256sum "$APK" | tee apk-sha256.txt
 
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: mobile-local-video-v0.3-apk
+          name: mobile-local-video-v0.7-mobilei2v-gpu-apk
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             apk-sha256.txt
             apk-badging.txt
             apk-signing.txt
             app/src/main/assets/runtime/runtime-manifest.txt
+            tools/mobilei2v/upstream.lock.properties
           if-no-files-found: error
           retention-days: 30
