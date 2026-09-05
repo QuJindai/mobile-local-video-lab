@@ -103,6 +103,30 @@ public final class ModelPackManifest {
                 minRam, recommendedRam, files, checksums);
     }
 
+    /**
+     * Compatibility view used by the existing model store/installer. The
+     * accelerated manifest remains attached to InstalledModelPack and is the
+     * only source of accelerated-readiness truth.
+     */
+    static ModelPackManifest fromAccelerated(AcceleratedPackManifest accelerated) {
+        LinkedHashMap<String, String> hashes = new LinkedHashMap<>();
+        for (String path : accelerated.files) {
+            hashes.put(path, accelerated.expectedSha256(path));
+        }
+        return new ModelPackManifest(
+                accelerated.id,
+                accelerated.backend,
+                accelerated.version,
+                accelerated.sourceRepo,
+                accelerated.sourceCommit,
+                "Apache-2.0",
+                "MIT",
+                8192,
+                12288,
+                accelerated.files,
+                hashes);
+    }
+
     public boolean isMobileI2V() {
         return "mobilei2v".equalsIgnoreCase(backend);
     }
