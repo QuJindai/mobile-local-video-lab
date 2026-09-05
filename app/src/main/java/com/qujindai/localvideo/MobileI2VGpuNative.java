@@ -5,8 +5,6 @@ import java.io.File;
 /** JNI bridge for the production MobileI2V accelerated runtime. */
 public final class MobileI2VGpuNative {
     public static final int LATENT_CFG_FLOATS = 2 * 128 * 3 * 23 * 40;
-    public static final int PROMPT_CFG_FLOATS = 2 * 1 * 300 * 896;
-    public static final int PROMPT_MASK_BYTES = 2 * 300;
 
     private static final boolean NATIVE_LOADED;
     private static final String NATIVE_ERROR;
@@ -42,9 +40,14 @@ public final class MobileI2VGpuNative {
         if (!NATIVE_LOADED) {
             return new Probe(false, false, "GPU native runtime 加载失败 · " + NATIVE_ERROR);
         }
-        File denoiser = pack.artifact("denoiser.mnn");
-        if (!denoiser.isFile()) {
-            return new Probe(false, false, "denoiser.mnn 缺失");
+        String[] required = {
+                "denoiser.mnn",
+                "empty_prompt.f16",
+                "empty_prompt_mask.bin"
+        };
+        for (String name : required) {
+            File file = pack.artifact(name);
+            if (!file.isFile()) return new Probe(false, false, name + " 缺失");
         }
         String result;
         try {
@@ -89,23 +92,22 @@ public final class MobileI2VGpuNative {
             this.handle = handle;
         }
 
+        /**
+         * Prompt embeddings, text attention mask and guide conditioning mask are
+         * read once from the verified pack by native code, avoiding multi-MB
+         * Java→JNI transfers for every denoising step.
+         */
         public synchronized void runDenoiser(
                 float[] latentCfg2,
                 float timestep,
-                float[] promptCfg2,
-                byte[] maskCfg2,
-                float[] flowScoreCfg2,
+                float flowScore,
                 float[] outputCfg2) {
             if (handle == 0L) throw new IllegalStateException("GPU session already closed");
             requireLength(latentCfg2, LATENT_CFG_FLOATS, "latentCfg2");
-            requireLength(promptCfg2, PROMPT_CFG_FLOATS, "promptCfg2");
-            if (maskCfg2 == null || maskCfg2.length != PROMPT_MASK_BYTES) {
-                throw new IllegalArgumentException("maskCfg2 must contain " + PROMPT_MASK_BYTES + " bytes");
-            }
-            requireLength(flowScoreCfg2, 2, "flowScoreCfg2");
             requireLength(outputCfg2, LATENT_CFG_FLOATS, "outputCfg2");
+            float[] flowScoreCfg2 = {flowScore, flowScore};
             int code = nativeRunDenoiser(
-                    handle, latentCfg2, timestep, promptCfg2, maskCfg2, flowScoreCfg2, outputCfg2);
+                    handle, latentCfg2, timestep, flowScoreCfg2, outputCfg2);
             if (code != 0) throw new IllegalStateException("GPU denoiser failed · code=" + code);
         }
 
@@ -130,8 +132,6 @@ public final class MobileI2VGpuNative {
             long handle,
             float[] latentCfg2,
             float timestep,
-            float[] promptCfg2,
-            byte[] maskCfg2,
             float[] flowScoreCfg2,
             float[] outputCfg2);
     private static native void nativeRelease(long handle);
