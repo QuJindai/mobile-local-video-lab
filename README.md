@@ -2,6 +2,15 @@
 
 Android/Snapdragon experiments for fully offline neural video generation.
 
+## Current priority: real MobileI2V integration
+
+Model execution and conversion acceptance now precede scene expansion and the
+next APK delivery. The baseline VAE encoder and decoder passed full-resolution
+PyTorch/ONNX parity on 2026-09-12. The real denoiser runs and exports, but its
+FP16 numerical comparison failed; MobileI2V remains **NOT READY**. MNN and
+handset GPU acceptance are still required. See the
+[integration status and original test evidence](docs/MOBILEI2V_INTEGRATION.md).
+
 ## V0.7 APK candidate
 
 The `feat/v07-mobilei2v-gpu` branch builds version `0.7.0` (versionCode `7`),
