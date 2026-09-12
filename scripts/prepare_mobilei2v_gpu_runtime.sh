@@ -27,6 +27,16 @@ git -C "${MNN_DIR}" fetch --depth=1 origin "${MNN_COMMIT}"
 git -C "${MNN_DIR}" checkout --detach "${MNN_COMMIT}"
 test "$(git -C "${MNN_DIR}" rev-parse HEAD)" = "${MNN_COMMIT}"
 
+# Check serialized input declarations before the pinned runtime can erase an
+# unsupported DT_HALF declaration while creating a Float32 Tensor.
+c++ -std=c++17 -O2 -DNDEBUG \
+  -I"${ROOT}/app/src/main/cpp/mobilei2v" \
+  -I"${MNN_DIR}/schema/current" \
+  -I"${MNN_DIR}/3rd_party/flatbuffers/include" \
+  "${ROOT}/tools/mobilei2v/test_mnn_port_admission.cpp" \
+  -o "${WORK}/test_mnn_port_admission"
+"${WORK}/test_mnn_port_admission"
+
 cmake \
   -S "${ROOT}/app/src/main/cpp/mobilei2v" \
   -B "${BUILD_DIR}" \

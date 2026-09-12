@@ -2,6 +2,7 @@
 
 #include <MNN/Interpreter.hpp>
 #include <MNN/Tensor.hpp>
+#include "mnn_port_admission.hpp"
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -128,6 +129,7 @@ inline std::unique_ptr<MNN::Interpreter> createInterpreterMmap(
         ~Mapping() { munmap(data, size); }
     } mapping{mapped, size};
     madvise(mapped, size, MADV_SEQUENTIAL);
+    if (!validateSerializedFloatInputs(mapped, size, error)) return nullptr;
     std::unique_ptr<MNN::Interpreter> interpreter(
             MNN::Interpreter::createFromBuffer(mapped, size));
     if (!interpreter) {

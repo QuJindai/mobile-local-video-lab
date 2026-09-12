@@ -36,6 +36,8 @@ add_library(mobilei2v_gpu SHARED
 
 target_include_directories(mobilei2v_gpu PRIVATE
     "${MNN_SOURCE_DIR}/include"
+    "${MNN_SOURCE_DIR}/schema/current"
+    "${MNN_SOURCE_DIR}/3rd_party/flatbuffers/include"
     "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 
