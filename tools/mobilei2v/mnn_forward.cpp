@@ -111,7 +111,10 @@ void check_tensor(const MNN::Tensor* tensor, const Fixture& fixture, bool host =
     require(type.code == halide_type_float && type.bits == 32 && type.lanes == 1,
             "MNN port is not scalar-lane float32: " + fixture.name);
     require(tensor->shape() == fixture.shape, "MNN port shape mismatch: " + fixture.name);
-    require(tensor->getDimensionType() == MNN::Tensor::CAFFE,
+    const auto layout = tensor->getDimensionType();
+    // CPU kernels may pack channel-first tensors as CAFFE_C4 internally.
+    // The materialized host fixture must always be plain NCHW/CAFFE.
+    require(layout == MNN::Tensor::CAFFE || (!host && layout == MNN::Tensor::CAFFE_C4),
             "MNN port must retain channel-first ONNX layout: " + fixture.name);
     require(checked_count(tensor->shape()) == fixture.count, "MNN tensor count mismatch");
     if (host) {
@@ -215,9 +218,15 @@ void forward(const char* manifest_path) {
     require(net->getSessionInfo(session, MNN::Interpreter::RESIZE_STATUS, &resize_status) && resize_status == 0,
             "MNN CPU session is not ready; resizing is forbidden for this exact contract");
     int backends[2] = {-1, -1};
+    // The pinned CPURuntime selects AVX2Backend on x86. It reports the
+    // internal CPU_EXTENSION type; this is still CPU, not an accelerator.
+    const auto is_cpu = [](int type) {
+        return type == MNN_FORWARD_CPU || type == MNN_FORWARD_CPU_EXTENSION;
+    };
     require(net->getSessionInfo(session, MNN::Interpreter::BACKENDS, backends)
-            && backends[0] == MNN_FORWARD_CPU && (backends[1] == -1 || backends[1] == MNN_FORWARD_CPU),
+            && is_cpu(backends[0]) && (backends[1] == -1 || is_cpu(backends[1])),
             "MNN session is not CPU-only");
+    std::cout << "MNN CPU backend types: " << backends[0] << ", " << backends[1] << '\n';
     check_ports(net->getSessionInputAll(session), inputs);
     check_ports(net->getSessionOutputAll(session), outputs);
     for (const auto& fixture : inputs) {
