@@ -92,6 +92,38 @@ records every rewritten permutation in the reports. No weights, arithmetic,
 precision, crop, or sampling were changed. The numerical comparison above was
 performed after this correction.
 
-VAE ONNX qualification is complete for these fixtures. Denoiser qualification,
-MNN conversion, Android interface changes and actual Adreno execution remain
-separate gates. The previous APK has not thereby become MobileI2V-ready.
+VAE ONNX qualification is complete for these fixtures. MNN conversion, Android
+interface changes and actual Adreno execution remain separate gates. The
+previous APK has not thereby become MobileI2V-ready.
+
+## Denoiser result and remaining blocker
+
+[Run 34682248488](https://github.com/QuJindai/mobile-local-video-lab/actions/runs/34682248488)
+at `8ecbf33dac2e7be7d52359d368913634d795fcfa` loaded all 267,218,048 learned
+parameters and ran the real full-shape FP16 denoiser. Changing the unused prompt
+had measured maximum difference `0.0`. ONNX export and graph execution succeeded,
+but numerical parity **failed** with maximum absolute error `0.013671875` and
+RMSE `0.0017619933933019638` under `atol=0.005`, `rtol=0.01`. The unmodified
+[failure report](evidence/mobilei2v-denoiser-failed.json) is retained. No qualified
+denoiser model was released and the tolerance has not been relaxed.
+
+The actual ONNX ports are `latent`, `timestep`, `cond_mask`, `flow_score`, and
+`output`; only `cond_mask` is FP32, with the others FP16. The current Android
+expectation of `prompt`/`text_mask` is therefore incompatible with this export.
+The VAE encoder also requires explicit `posterior_epsilon` and produces `guide`.
+Runtime changes must follow the ultimately qualified MNN contract.
+
+A source inspection identified a precision question requiring measurement:
+[ORT 1.20.1's CPU cast transformer](https://github.com/microsoft/onnxruntime/blob/v1.20.1/onnxruntime/core/optimizer/insert_cast_transformer.cc)
+promotes unsupported FP16 operators to FP32 and eliminates inserted intermediate
+casts. That changes rounding boundaries. This is a possible contributor to the
+observed difference, not a proven attribution of this run's error. It does not
+justify marking the failed comparison successful. A CUDA reference path is now
+available in the qualifier; the attempted bounded Hugging Face T4 job did not
+start because the service returned `402 Payment Required`.
+
+Do not directly feed the current FP16 ONNX graph into the pinned MNN baseline:
+its converter preserves `DT_HALF`, while `Tensor::setType` does not implement
+that input type in this revision. VAE MNN qualification therefore accepts only
+the verified FP32 VAE graphs and checks actual runtime port types before copying.
+Denoiser precision, MNN conversion and real Adreno execution remain incomplete.
