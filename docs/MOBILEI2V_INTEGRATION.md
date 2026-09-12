@@ -118,11 +118,12 @@ including a representable FP16 boundary case that was incorrectly accepted.
 The historical report above is unchanged; no new full-model parity pass is
 claimed from these helper tests.
 
-The actual ONNX ports are `latent`, `timestep`, `cond_mask`, `flow_score`, and
-`output`; only `cond_mask` is FP32, with the others FP16. The current Android
-expectation of `prompt`/`text_mask` is therefore incompatible with this export.
-The VAE encoder also requires explicit `posterior_epsilon` and produces `guide`.
-Runtime changes must follow the ultimately qualified MNN contract.
+The original ONNX ports are `latent`, `timestep`, `cond_mask`, `flow_score`, and
+`output`; only `cond_mask` is FP32, with the others FP16. V0.7.1 removed Android's
+obsolete `prompt`/`text_mask` inputs, added the encoder's explicit
+`posterior_epsilon`, and consumes its `guide` output. All Android external ports
+are FP32; serialized non-FP32 MNN inputs are rejected before initialization.
+The original FP16 export therefore still cannot be imported as a runnable pack.
 
 A source inspection identified a precision question requiring measurement:
 [ORT 1.20.1's CPU cast transformer](https://github.com/microsoft/onnxruntime/blob/v1.20.1/onnxruntime/core/optimizer/insert_cast_transformer.cc)
@@ -138,6 +139,9 @@ its converter preserves `DT_HALF`, while `Tensor::setType` does not implement
 that input type in this revision. VAE MNN qualification therefore accepts only
 the verified FP32 VAE graphs and checks actual runtime port types before copying.
 Denoiser precision, MNN conversion and real Adreno execution remain incomplete.
+The [controlled precision experiment](MOBILEI2V_PRECISION_DIAGNOSIS.md) records
+same-precision conversion error separately from changing FP16 arithmetic to
+FP32, against the exact same half-rounded weights and inputs.
 
 ## Measured MNN VAE conversion, 2026-09-12
 

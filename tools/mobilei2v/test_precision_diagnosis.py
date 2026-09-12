@@ -6,6 +6,14 @@ import diagnose_precision as diagnosis
 
 
 class PrecisionDiagnosisTest(unittest.TestCase):
+    def test_attention_adaptation_is_exact_and_rejects_unrecognized_source(self):
+        source = "def forward(self, x):\n    attn = self.attn_drop(attn).half()\n    return attn @ v\n"
+        actual = diagnosis.adapt_attention_source(source)
+        self.assertEqual(actual, source.replace(".half()", ".to(v.dtype)"))
+        for changed in (source.replace(".half()", ".float()"), source + source):
+            with self.assertRaises(ValueError):
+                diagnosis.adapt_attention_source(changed)
+
     def test_original_tolerance_records_failure_without_losing_metrics(self):
         reference = np.array([0, 1], dtype=np.float16)
         actual = np.array([0.0050201416015625, 1], dtype=np.float16)

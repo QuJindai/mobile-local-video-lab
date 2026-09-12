@@ -11,16 +11,23 @@ import argparse
 from collections import Counter
 import gc
 import hashlib
+import inspect
 import json
 import os
 from pathlib import Path
+import textwrap
 import time
+import types
 
 import numpy as np
 import qualify_upstream as upstream
 
 PROFILES = ("original-fp16", "promoted-fp32")
 NAMES = ("latent", "timestep", "cond_mask", "flow_score")
+# Only the original-FP16 phase is reusable from the reviewed first experiment.
+# Its later FP32 phase has an upstream hard-coded HALF attention incompatibility.
+ORIGINAL_EXPORT_SCRIPT = {"bytes": 16433,
+                          "sha256": "9f8a1e6a0a5657742cf6dee84e187af2332f6dae8e6c2cf8e5809cb70e98bed3"}
 
 
 def identity(path):
@@ -79,17 +86,64 @@ def load_export(directory, profile):
     report = json.loads((directory / "export.json").read_text())
     required = {"profile": profile, "source_commit": upstream.SOURCE_COMMIT,
                 "checkpoint_sha256": upstream.CHECKPOINT_SHA256, "export_completed": True,
-                "android_gpu_pack_ready": False, "onnx_contract": contract(profile),
-                "script": identity(__file__)}
+                "android_gpu_pack_ready": False, "onnx_contract": contract(profile)}
     for key, value in required.items():
         if report.get(key) != value:
             raise ValueError(f"export report {key} mismatch")
+    if report.get("script") != identity(__file__) and not (
+            profile == "original-fp16" and report.get("script") == ORIGINAL_EXPORT_SCRIPT):
+        raise ValueError("unrecognized export script identity")
     for name, expected in report["artifacts"].items():
         if Path(name).name != name or identity(directory / name) != expected:
             raise ValueError(f"export artifact identity mismatch: {name}")
     if not {"denoiser.onnx", "fixtures.npz"}.issubset(report["artifacts"]):
         raise ValueError("export must bind graph and exact fixtures")
     return report
+
+
+def adapt_attention_source(source):
+    old = "attn = self.attn_drop(attn).half()"
+    if source.count(old) != 1:
+        raise ValueError("pinned Attention.forward hard-coded HALF statement changed")
+    return source.replace(old, "attn = self.attn_drop(attn).to(v.dtype)")
+
+
+def promote_arithmetic(model):
+    """Explicit candidate adaptation; original FP16 methods remain untouched."""
+    import torch
+    from diffusion.model.nets.sana_blocks import Attention, LiteLA
+    original = Attention.forward
+    source = textwrap.dedent(inspect.getsource(original))
+    adapted = adapt_attention_source(source)
+    namespace = dict(original.__globals__)
+    exec(compile(adapted, "<recorded-fp32-attention-adaptation>", "exec"), namespace)
+    count_attention, count_rope = 0, 0
+    for block in model.blocks:
+        attention = block.attn
+        if isinstance(attention, Attention):
+            attention.forward = types.MethodType(namespace["forward"], attention)
+            count_attention += 1
+        elif isinstance(attention, LiteLA):
+            # Original LiteLA applies RoPE before its FP32 attention promotion.
+            # Keep the original half-rounded trig tables, expanded exactly,
+            # instead of also changing generated positional constants.
+            generator = attention.rope.get_cos_sin
+            def frozen(rope, D, seq_len, device, dtype, interpolation_scale=1,
+                       original_generator=generator):
+                cos, sin = original_generator(D, seq_len, device, torch.float16, interpolation_scale)
+                return cos.to(dtype), sin.to(dtype)
+            attention.rope.get_cos_sin = types.MethodType(frozen, attention.rope)
+            count_rope += 1
+        else:
+            raise ValueError("unrecognized original attention implementation")
+    if (count_attention, count_rope) != (2, 14):
+        raise ValueError("pinned attention architecture count changed")
+    return {"attention_instances": count_attention, "frozen_litela_rope_instances": count_rope,
+            "attention_original_sha256": hashlib.sha256(source.encode()).hexdigest(),
+            "attention_adapted_sha256": hashlib.sha256(adapted.encode()).hexdigest(),
+            "attention_change": "attn_drop output .half() -> .to(v.dtype)",
+            "litela_rope": "original FP16 frequencies/cos/sin exactly expanded to FP32",
+            "dense_attention_rope": "original FP32 RoPE unchanged"}
 
 
 def export(args, report):
@@ -127,6 +181,7 @@ def export(args, report):
         # Round weights exactly as the upstream FP16 baseline, THEN expand.
         # Loading untouched FP32 checkpoint weights would confound the test.
         model.float()
+        report["precision_adaptations"] = promote_arithmetic(model)
         dtype = torch.float32
     report.update(loaded_parameters=sum(p.numel() for p in model.parameters()),
                   generated_buffers_not_loaded=list(missing),
@@ -196,6 +251,11 @@ def export(args, report):
         for hook in hooks:
             hook.remove()
     wrapper.taps.clear()
+    tap_modules.clear()
+    hooks.clear()
+    # The loop variables also reference the final block and its hook closure.
+    if tap_names:
+        del module, capture, hook
     del wrapper, model, inputs, latent, cond
     gc.collect()
     graph = onnx.load(str(args.directory / "denoiser.onnx"))
