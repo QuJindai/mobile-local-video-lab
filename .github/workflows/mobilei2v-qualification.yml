@@ -57,6 +57,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mobilei2v-denoiser-onnx-host-only
-          path: qualification/denoiser.onnx*
+          path: qualification/
           if-no-files-found: error
           retention-days: 7
+      - name: Preserve failed conversion for precision diagnosis
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobilei2v-denoiser-UNQUALIFIED-diagnostic
+          path: qualification/
+          if-no-files-found: warn
+          retention-days: 3

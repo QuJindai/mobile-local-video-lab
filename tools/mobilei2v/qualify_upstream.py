@@ -216,6 +216,14 @@ def run(args, report):
     gc.collect()
     if device == "cuda":
         torch.cuda.empty_cache()
+    # Keep the exact reference and inputs even if ORT parity fails, so
+    # diagnosing conversion precision does not repeat a long native forward.
+    fixture_path = args.onnx.with_suffix(args.onnx.suffix + ".fixtures.npz")
+    np.savez(fixture_path, reference=reference, **arrays)
+    report["onnx_sha256"] = hashlib.sha256(args.onnx.read_bytes()).hexdigest()
+    report["fixture_sha256"] = hashlib.sha256(fixture_path.read_bytes()).hexdigest()
+    report["fixture_file"] = fixture_path.name
+    args.report.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
     graph = onnx.load(str(args.onnx), load_external_data=False)
     onnx.checker.check_model(str(args.onnx))
     contract = {}
@@ -237,7 +245,6 @@ def run(args, report):
     session = ort.InferenceSession(str(args.onnx), sess_options=options, providers=["CPUExecutionProvider"])
     actual = session.run(["output"], arrays)[0]
     report["onnx_parity"] = compare_outputs(reference, actual)
-    report["onnx_sha256"] = hashlib.sha256(args.onnx.read_bytes()).hexdigest()
     report["denoiser_qualification_passed"] = True
 
 
