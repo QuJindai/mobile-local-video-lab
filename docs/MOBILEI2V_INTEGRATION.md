@@ -40,7 +40,9 @@ This integration does not promise arbitrary text-directed actions.
 diagnostic environment, with the exact source and weight hashes. It checks
 learned-parameter loading, full-size finite outputs, measured prompt invariance,
 the actual exported ONNX inputs, and ONNX Runtime/PyTorch numerical parity.
-It uploads an ONNX artifact only after those checks pass.
+Only a passing graph is uploaded as a qualified ONNX artifact. A failed graph
+and its exact fixtures are now retained separately as `UNQUALIFIED-diagnostic`
+for three days; they must not be packaged for Android.
 
 `qualify_upstream.py` loads original model modules. On a CPU host it disables
 only the optional CUDA/Triton import path; the selected LiteLA/GLUMBConv and
@@ -129,3 +131,30 @@ its converter preserves `DT_HALF`, while `Tensor::setType` does not implement
 that input type in this revision. VAE MNN qualification therefore accepts only
 the verified FP32 VAE graphs and checks actual runtime port types before copying.
 Denoiser precision, MNN conversion and real Adreno execution remain incomplete.
+
+## Measured MNN VAE conversion, 2026-09-12
+
+[Run 34684475670](https://github.com/QuJindai/mobile-local-video-lab/actions/runs/34684475670)
+at `1ace2a33613a12f14d61718b6b2a9dbd63898695` converted both qualified FP32 VAE
+graphs with the pinned MNN converter and ran both actual CPU forwards. Ports,
+shapes, byte counts and finite outputs passed. Numerical parity **failed**:
+
+| Stage | Maximum absolute error | RMSE | Result |
+| --- | ---: | ---: | --- |
+| Encoder | 0.000291176 | 0.000034164 | Fail |
+| Decoder | 0.002969623 | 0.000084739 | Fail |
+
+These use the same full-size PyTorch fixtures and unchanged elementwise
+`atol=0.0001`, `rtol=0.001`. Original reports are retained in
+[encoder evidence](evidence/mobilei2v-mnn-encoder-failed.json) and
+[decoder evidence](evidence/mobilei2v-mnn-decoder-failed.json). The runtime used
+MNN's AVX2 CPU extension (backend 13), `Precision_High`, four threads and the
+default Winograd setting. Conversion and execution alone do not qualify these
+models. The earlier backend classification defect has been corrected.
+
+The next diagnostic uses `WINOGRAD_MEMORY_LEVEL=0`. In the pinned CPU factory,
+this selects dense convolution instead of Winograd transforms. This is a
+measured hypothesis about numerical accumulation, not an established cause or
+a relaxed acceptance rule. Weights, graphs, inputs and tolerances are unchanged.
+Failed models and outputs are now retained separately for three days to support
+further diagnosis. Neither VAE MNN stage nor the full GPU pack is ready yet.

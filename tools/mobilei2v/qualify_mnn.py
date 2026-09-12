@@ -402,6 +402,7 @@ def main(argv=None):
         parser.error("output report must not be a symlink")
     report = {"format": "mobilei2v-baseline-mnn-host-qualification-v1", "stage": args.stage,
               "execution": "host-cpu", "backend": "MNN_FORWARD_CPU", "precision": "Precision_High",
+              "runtime_hints": {"WINOGRAD_MEMORY_LEVEL": 0},
               "qualification_scope": "one VAE stage; CPU diagnostic only; not end-to-end I2V or Adreno",
               "cpu_diagnostic_only": True, "android_gpu_pack_ready": False,
               "conversion_passed": False, "mnn_host_parity_passed": False,

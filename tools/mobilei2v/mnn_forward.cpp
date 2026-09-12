@@ -205,6 +205,11 @@ void forward(const char* manifest_path) {
     require(net != nullptr, "MNN could not load the real converted graph");
     net->setSessionMode(MNN::Interpreter::Session_Release);
     net->setSessionMode(MNN::Interpreter::Session_Backend_Fix);
+    // Establish FP32 parity before enabling transformed convolution kernels.
+    // In this pinned CPU factory, level 0 selects dense convolution instead
+    // of Winograd. The original weights, graph and tolerances stay unchanged.
+    net->setSessionHint(MNN::Interpreter::WINOGRAD_MEMORY_LEVEL, 0);
+    std::cout << "MNN WINOGRAD_MEMORY_LEVEL: 0 (dense CPU convolution)\n";
     MNN::BackendConfig backend;
     backend.precision = MNN::BackendConfig::Precision_High;
     MNN::ScheduleConfig config;

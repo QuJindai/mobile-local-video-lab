@@ -1,0 +1,216 @@
+{
+  "format": "mobilei2v-baseline-mnn-host-qualification-v1",
+  "stage": "decoder",
+  "execution": "host-cpu",
+  "backend": "MNN_FORWARD_CPU",
+  "precision": "Precision_High",
+  "qualification_scope": "one VAE stage; CPU diagnostic only; not end-to-end I2V or Adreno",
+  "cpu_diagnostic_only": true,
+  "android_gpu_pack_ready": false,
+  "conversion_passed": true,
+  "mnn_host_parity_passed": false,
+  "mnn_parity": {
+    "passed": false,
+    "atol": 0.0001,
+    "rtol": 0.001,
+    "expected_shape": [
+      1,
+      3,
+      17,
+      720,
+      1280
+    ],
+    "finite": true,
+    "max_absolute_error": 0.0029696226119995117,
+    "rmse": 8.473949797881593e-05,
+    "expected_bytes": 188006400,
+    "actual_bytes": 188006400,
+    "reference_shape": [
+      1,
+      3,
+      17,
+      720,
+      1280
+    ],
+    "actual_shape": [
+      1,
+      3,
+      17,
+      720,
+      1280
+    ],
+    "reference_dtype": "float32",
+    "actual_dtype": "float32",
+    "elements": 47001600
+  },
+  "threads": 4,
+  "host": {
+    "system": "Linux",
+    "machine": "x86_64"
+  },
+  "remaining": [
+    "other VAE stage and end-to-end MobileI2V acceptance",
+    "actual handset Adreno execution, correctness, and performance"
+  ],
+  "source_report": {
+    "path": "/home/runner/work/mobile-local-video-lab/mobile-local-video-lab/source-qualification/report.json",
+    "bytes": 17481,
+    "sha256": "9a3852f79ff74b334c819f7290d2139c8a710d92e8335c509e1ca5974105a971"
+  },
+  "source_artifacts": {
+    "model.onnx": {
+      "bytes": 955488291,
+      "sha256": "facdee06f80395952417ffd915b67857469f520d5b1075679481403a2d0e4fba"
+    },
+    "reference.npy": {
+      "bytes": 188006528,
+      "sha256": "189d3a872c1f542d31bef19cda86c6457ce513ecf6ccc011a61de272a343c61f"
+    },
+    "latent.npy": {
+      "bytes": 1413248,
+      "sha256": "e7ff1fbf214efd7828aa65d270fd820505f833d2ff9b05a1bf53872f92b03c38"
+    }
+  },
+  "source_onnx_parity": {
+    "passed": true,
+    "max_absolute_error": 1.633167266845703e-05,
+    "rmse": 1.3842478784493373e-06,
+    "atol": 0.0001,
+    "rtol": 0.001,
+    "elements": 47001600,
+    "finite": true
+  },
+  "checkpoint": {
+    "bytes": 1676798532,
+    "sha256": "265ca87cb5dff5e37f924286e957324e282fe7710a952a7dafc0df43883e2010"
+  },
+  "pins": {
+    "vae.repo": "Lightricks/LTX-Video",
+    "vae.revision": "8984fa25007f376c1a299016d0957a37a2f797bb",
+    "vae.subfolder": "vae",
+    "vae.config": "vae/config.json",
+    "vae.weights": "vae/diffusion_pytorch_model.safetensors",
+    "vae.weights.bytes": "1676798532",
+    "vae.weights.sha256": "265ca87cb5dff5e37f924286e957324e282fe7710a952a7dafc0df43883e2010",
+    "vae.author.confirmation": "https://github.com/hustvl/MobileI2V/issues/2#issuecomment-3588124983",
+    "vae.scaling_factor": "1.0",
+    "vae.posterior": "sample",
+    "vae.raw.height": "736",
+    "vae.output.crop.rows": "0:720"
+  },
+  "mobilei2v_source_commit": "8d0a253c766b05a43ba408baf5e8f800a36be8b4",
+  "local_code_and_locks": {
+    "/home/runner/work/mobile-local-video-lab/mobile-local-video-lab/tools/mobilei2v/qualify_vae.py": {
+      "bytes": 25406,
+      "sha256": "74f22902f2260d6a1f600f2916ad2e8aee4747b12e23728a0578ec4920ea5fcd"
+    },
+    "/home/runner/work/mobile-local-video-lab/mobile-local-video-lab/tools/mobilei2v/auxiliary.lock.properties": {
+      "bytes": 777,
+      "sha256": "93806210fd25d7c79eccdcb1f24b4baea521afa89847d00e02134c4c7c482c0e"
+    },
+    "/home/runner/work/mobile-local-video-lab/mobile-local-video-lab/tools/mobilei2v/upstream.lock.properties": {
+      "bytes": 389,
+      "sha256": "fe676fac8af7627e0d475de53dcc4285bb23ca9a3f1bdf3d71e7813a56218953"
+    },
+    "/home/runner/work/mobile-local-video-lab/mobile-local-video-lab/tools/mobilei2v/qualify_mnn.py": {
+      "bytes": 22019,
+      "sha256": "6dcad8e48394d0c11d89a09e94fb46fccc5a2c830b0772dfa5f7713034f5ae47"
+    },
+    "/home/runner/work/mobile-local-video-lab/mobile-local-video-lab/tools/mobilei2v/mnn_forward.cpp": {
+      "bytes": 13093,
+      "sha256": "449dd41cda88d149ddccd914d7e008d0f65a4ba7ca48785e97b6e0a59d7958c5"
+    }
+  },
+  "mnn_source": {
+    "path": "/home/runner/work/_temp/MNN",
+    "commit": "3db3cc904dfea55286972b472b040ad5525aa083",
+    "clean": true
+  },
+  "converter": {
+    "path": "/home/runner/work/_temp/mnn-build/MNNConvert",
+    "bytes": 16240,
+    "sha256": "b79c3c97c4a6560b76d2607cffd47ed4db382acf5329f90c455468e921547c51"
+  },
+  "runner": {
+    "path": "/home/runner/work/_temp/mnn-forward",
+    "bytes": 110200,
+    "sha256": "961258bd19b56a987614374d63d7f0f711a6be632aef29d856e1222dd69e09d3"
+  },
+  "onnx_contract": {
+    "inputs": {
+      "latent": {
+        "dtype": "float32",
+        "shape": [
+          1,
+          128,
+          3,
+          23,
+          40
+        ]
+      }
+    },
+    "outputs": {
+      "video": {
+        "dtype": "float32",
+        "shape": [
+          1,
+          3,
+          17,
+          720,
+          1280
+        ]
+      }
+    }
+  },
+  "artifacts": {
+    "latent.bin": {
+      "bytes": 1413120,
+      "sha256": "eed9e9cd63be7164fae354fa2e084be80e071ef95c07edf283d1feb18616fa19"
+    },
+    "manifest.json": {
+      "bytes": 758,
+      "sha256": "a08dd4429da438de52fe7cf1415279966ecbe4876aff6981c0315eefdeaba43e"
+    },
+    "model.mnn": {
+      "bytes": 955629796,
+      "sha256": "6d344d31236bb2b5cee8115840690d4ee66ad97e436f583ef68a1b91c2d0395b"
+    },
+    "video.bin": {
+      "bytes": 188006400,
+      "sha256": "0599c6ab0b95a8daeed62c6b8fbe0fec96623418d87073f681bc9ae28775a108"
+    }
+  },
+  "commands": {
+    "convert": {
+      "argv": [
+        "/home/runner/work/_temp/mnn-build/MNNConvert",
+        "-f",
+        "ONNX",
+        "--modelFile",
+        "/home/runner/work/mobile-local-video-lab/mobile-local-video-lab/source-qualification/model.onnx",
+        "--MNNModel",
+        "/home/runner/work/mobile-local-video-lab/mobile-local-video-lab/mnn-qualification/decoder/model.mnn",
+        "--bizCode",
+        "MobileI2V",
+        "--keepInputFormat=1"
+      ],
+      "timeout_seconds": 3600,
+      "returncode": 0,
+      "elapsed_seconds": 5.230244923999976,
+      "log_tail": "The device supports: i8sdot:0, fp16:0, i8mm: 0, sve2: 0, sme2: 0\nStart to Convert Other Model Format To MNN Model..., target version: 3.2\n[09:01:26] :46: ONNX Model ir version: 8\n[09:01:26] :47: ONNX Model opset version: 17\nStart to Optimize the MNN Net...\ninputTensors : [ latent, ]\noutputTensors: [ video, ]\nConverted Success!\n"
+    },
+    "runner": {
+      "argv": [
+        "/home/runner/work/_temp/mnn-forward",
+        "--manifest",
+        "/home/runner/work/mobile-local-video-lab/mobile-local-video-lab/mnn-qualification/decoder/manifest.json"
+      ],
+      "timeout_seconds": 3600,
+      "returncode": 0,
+      "elapsed_seconds": 41.49885629100004,
+      "log_tail": "The device supports: i8sdot:0, fp16:0, i8mm: 0, sve2: 0, sme2: 0\nMNN CPU backend types: 13, -1\nMNN CPU forward completed; Python parity comparison is still required.\n"
+    }
+  },
+  "error": "ValueError: MNN/PyTorch VAE parity failed; see mnn_parity",
+  "elapsed_seconds": 51.391291205000016
+}

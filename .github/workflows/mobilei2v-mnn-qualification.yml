@@ -84,3 +84,11 @@ jobs:
           path: mnn-qualification/
           if-no-files-found: error
           retention-days: 7
+      - name: Preserve unqualified model and actual outputs for diagnosis
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobilei2v-mnn-${{ matrix.stage }}-UNQUALIFIED-diagnostic
+          path: mnn-qualification/
+          if-no-files-found: warn
+          retention-days: 3
