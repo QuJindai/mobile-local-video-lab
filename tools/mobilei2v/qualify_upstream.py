@@ -105,6 +105,14 @@ def import_original_model(root):
         namespace.__path__ = [str(root.joinpath(*package.split(".")))]
         namespace.__package__ = package
         sys.modules[package] = namespace
+    # Upstream treats an installed Triton package as an available CUDA device.
+    # Its optional fastlinear import then calls get_device_name(0). The pinned
+    # model uses ordinary LiteLA/GLUMBConv; disable only this optional import on
+    # an actual CPU host, leaving every executed model layer unchanged.
+    import torch
+    if not torch.cuda.is_available():
+        import_utils = importlib.import_module("diffusion.utils.import_utils")
+        import_utils.is_triton_module_available = lambda: False
     importlib.import_module("diffusion.model.nets.mobiledit")
     return importlib.import_module("diffusion.model.builder")
 
@@ -118,6 +126,7 @@ def run(args, report):
     root = args.upstream.resolve()
     verify_source(root)
     report["checkpoint_sha256"] = verify_checkpoint(args.checkpoint)
+    report["optional_cuda_kernels_disabled"] = not torch.cuda.is_available()
     torch.set_num_threads(args.threads)
     torch.manual_seed(1)
     os.environ["DISABLE_XFORMERS"] = "1"

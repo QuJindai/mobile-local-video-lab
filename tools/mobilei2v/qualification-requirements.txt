@@ -17,3 +17,4 @@ safetensors==0.6.2
 huggingface-hub==0.35.3
 # Imported by upstream's optional DC-AE modules even in the CPU diagnostic.
 triton==3.0.0
+ipdb==0.13.13
