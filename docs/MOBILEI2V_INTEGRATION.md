@@ -143,6 +143,15 @@ The [controlled precision experiment](MOBILEI2V_PRECISION_DIAGNOSIS.md) records
 same-precision conversion error separately from changing FP16 arithmetic to
 FP32, against the exact same half-rounded weights and inputs.
 
+The controlled experiments are now executed: the original FP16 comparison
+reproduced 78 failing output elements; the explicitly adapted FP32 candidate
+still failed both same-precision conversion (36 elements at 1e-4/1e-3) and the
+unchanged original-FP16 gate (80 elements at 0.005/0.01). Removing the hard-coded
+HALF attention type conflict made the candidate executable, not qualified.
+Exact reports, graphs and inputs are retained and linked in the experiment
+document. No denoiser MNN qualification, model-pack release or Adreno pass is
+claimed from these runs.
+
 ## Measured MNN VAE conversion, 2026-09-12
 
 [Run 34684475670](https://github.com/QuJindai/mobile-local-video-lab/actions/runs/34684475670)

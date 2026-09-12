@@ -49,3 +49,38 @@ MNN 转换、实际 Adreno 执行和完整视频效果仍需各自验证。
 - [未适配 FP32 失败报告](evidence/denoiser-precision-original-promoted-fp32-export.json)
 - 原始图与确切输入 artifact：`10297535932`，699,175,066 字节；ZIP SHA-256
   `acb8aba107c488a035de54c6c4f54e72b6d652065f8778ee019c097df02d65a7`。
+
+## 适配后的 FP32 实测结果
+
+[运行 34692274739](https://github.com/QuJindai/mobile-local-video-lab/actions/runs/34692274739)
+对应源码 `daadc7648d921e4fd9a2babbad203c528f851f7b`。10 项原有检查和 6 项
+针对性检查通过。真实权重的 FP32 前向耗时 19.57 秒，导出、ORT 执行和
+全部对照完成，没有再次出现 Float/Half 类型冲突。
+
+| 比较 | 容差 atol / rtol | 超标元素 / 706,560 | 最大绝对误差 | RMSE | 结论 |
+| --- | --- | ---: | ---: | ---: | --- |
+| FP32 ONNX 对 FP32 PyTorch | 0.0001 / 0.001 | 36 | 0.0008411855 | 0.00001208484 | 未通过 |
+| FP32 PyTorch 对原始 FP16 | 0.005 / 0.01 | 80 | 0.0134997368 | 0.0017354018 | 未通过 |
+| FP32 ONNX 对原始 FP16 | 0.005 / 0.01 | 80 | 0.0134987831 | 0.0017355511 | 未通过 |
+
+这次 Actions 的 success 表示实验执行完毕，**不表示模型精度通过**。
+报告中的模型资格、完整流程资格、Android 模型包就绪标志均为 false。
+当前 FP32 候选不能作为已合格的 MobileI2V 模型包发布。
+
+舍入微型对照也完成：原始 PyTorch 表达式输出 0，单个 ORT 图输出
+0.0078125，显式分开的 FP16 算子边界恢复输出 0。这证明该受控输入下的
+舍入差异，尚不能解释完整网络全部误差。MNN 固定版本的 `CastOnnx.cpp`
+还会将 `Cast(FLOAT16)` 改成 `DT_FLOAT`，因此普通 Cast 不能充当保留半精度
+舍入的实现。后续需进一步隔离第 3 个模型块，并评估保留精度语义的执行
+适配；不能仅改端口名称、扩大容差或将新参考结果替代原始参考。
+
+- [候选比较报告](evidence/denoiser-precision-adapted-promoted-fp32-compare.json)
+- [候选导出证据](evidence/denoiser-precision-adapted-promoted-fp32-export.json)
+- [舍入对照](evidence/denoiser-precision-adapted-rounding-control.json)
+- 全部图与确切输入 artifact：`10298335461`，1,356,329,530 字节；ZIP SHA-256
+  `edeb2d355dea4860a0dbd219461d22c2fa7c3892c06125aeb5247024684d1cdf`。
+- 报告 ZIP 下载后校验 SHA-256：
+  `40a55e16d1255b9703318264d4c75b21fa14fe15615142b28b1312231e00d82d`。
+
+本轮没有发布新 APK 或模型包。手机截图所示的 Depth 3D 与原始权重下载
+状态已记录于 [V0.7.1 手机测试记录](V0.7.1_HANDSET_TEST.md)。

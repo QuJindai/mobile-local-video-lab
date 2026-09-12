@@ -1,0 +1,35 @@
+{
+  "format": "mobilei2v-fp16-rounding-control-v1",
+  "source_commit": "8d0a253c766b05a43ba408baf5e8f800a36be8b4",
+  "source_file_sha256": "790ffce7f44b576112b7671760101a316acd513d5983fd13af01759372c47b49",
+  "original_function": "def t2i_modulate(x, shift, scale):\n    return x * (1 + scale) + shift",
+  "script_sha256": "a322e1d506da38f75404302b0eaa74df8e3bc4b76e0dd843d44ffcfabbc5fb71",
+  "torch": "2.4.0+cpu",
+  "onnxruntime": "1.20.1",
+  "execution": "CPUExecutionProvider",
+  "optimization": "ORT_ENABLE_BASIC",
+  "inputs": {
+    "x": [
+      16.0
+    ],
+    "scale": [
+      0.00048828125
+    ],
+    "shift": [
+      -16.0
+    ]
+  },
+  "original_pytorch": [
+    0.0
+  ],
+  "monolithic_ort": [
+    0.0078125
+  ],
+  "split_ort_with_half_boundaries": [
+    0.0
+  ],
+  "split_matches_original": true,
+  "monolithic_matches_original": false,
+  "denoiser_error_attributed": false,
+  "android_gpu_pack_ready": false
+}

@@ -1,0 +1,99 @@
+{
+  "format": "mobilei2v-precision-diagnostic-v1",
+  "phase": "compare",
+  "profile": "promoted-fp32",
+  "source_commit": "8d0a253c766b05a43ba408baf5e8f800a36be8b4",
+  "execution": "host-cpu-diagnostic",
+  "android_gpu_pack_ready": false,
+  "denoiser_qualification_passed": false,
+  "full_pipeline_qualified": false,
+  "script": {
+    "bytes": 19629,
+    "sha256": "21291cc683a1f5cbc33cc4d7da3994073f59efaf7eb07e25641f21f7e459ec95"
+  },
+  "export_report": {
+    "bytes": 2445,
+    "sha256": "dd7ea98ec82649b280a08f5897090bf52bc4b9d562ba69e15862661283ae6029"
+  },
+  "source_artifacts": {
+    "denoiser.onnx": {
+      "bytes": 1060724290,
+      "sha256": "b4674295d5090abd8a56945257231237ef673813da78cec5ffbf9e8badca0b13"
+    },
+    "fixtures.npz": {
+      "bytes": 5664802,
+      "sha256": "960e1ea44dff288f4011cb0e30358207094a396bbdf60ce5181f539c43e6b13d"
+    },
+    "taps.json": {
+      "bytes": 3,
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    }
+  },
+  "ort_version": "1.20.1",
+  "onnx_provider": "CPUExecutionProvider",
+  "optimization": "ORT_ENABLE_BASIC",
+  "ort_seconds": 21.551312561000003,
+  "onnx_vs_same_precision_pytorch": {
+    "passed": false,
+    "atol": 0.0001,
+    "rtol": 0.001,
+    "elements": 706560,
+    "failed_elements": 36,
+    "max_absolute_error": 0.000841185450553894,
+    "rmse": 1.2084838434438849e-05,
+    "worst_tolerance_ratio": 4.009110736030103,
+    "worst_index": [
+      0,
+      33,
+      2,
+      21,
+      34
+    ],
+    "worst_reference": -0.018012896180152893,
+    "worst_actual": -0.017539769411087036
+  },
+  "pytorch_fp32_vs_original_fp16": {
+    "passed": false,
+    "atol": 0.005,
+    "rtol": 0.01,
+    "elements": 706560,
+    "failed_elements": 80,
+    "max_absolute_error": 0.013499736785888672,
+    "rmse": 0.0017354018211918878,
+    "worst_tolerance_ratio": 1.8979524973495112,
+    "worst_index": [
+      0,
+      3,
+      2,
+      11,
+      23
+    ],
+    "worst_reference": 0.01812744140625,
+    "worst_actual": 0.027961254119873047
+  },
+  "onnx_fp32_vs_original_fp16": {
+    "passed": false,
+    "atol": 0.005,
+    "rtol": 0.01,
+    "elements": 706560,
+    "failed_elements": 80,
+    "max_absolute_error": 0.013498783111572266,
+    "rmse": 0.001735551061195946,
+    "worst_tolerance_ratio": 1.9039114957592178,
+    "worst_index": [
+      0,
+      3,
+      2,
+      11,
+      23
+    ],
+    "worst_reference": 0.01812744140625,
+    "worst_actual": 0.0279921293258667
+  },
+  "fp32_candidate_passed_all_recorded_comparisons": false,
+  "original_fp16_export_report": {
+    "bytes": 1893,
+    "sha256": "0109f727b41ac82f347a05ded6e5e01bd23b870de3bd98e100877fecee7c34e7"
+  },
+  "diagnostic_completed": true
+}

@@ -1,0 +1,91 @@
+{
+  "format": "mobilei2v-precision-diagnostic-v1",
+  "phase": "export",
+  "profile": "promoted-fp32",
+  "source_commit": "8d0a253c766b05a43ba408baf5e8f800a36be8b4",
+  "execution": "host-cpu-diagnostic",
+  "android_gpu_pack_ready": false,
+  "denoiser_qualification_passed": false,
+  "full_pipeline_qualified": false,
+  "script": {
+    "bytes": 19629,
+    "sha256": "21291cc683a1f5cbc33cc4d7da3994073f59efaf7eb07e25641f21f7e459ec95"
+  },
+  "checkpoint_sha256": "bc6a545302b342b87d83a4d78e9b74d47ca59fbf908fd8e13d9ecedbe1a37f2d",
+  "precision_adaptations": {
+    "attention_instances": 2,
+    "frozen_litela_rope_instances": 14,
+    "attention_original_sha256": "2f9c32bfb33e0f1809d34e633a4b1c141d3cb208eefbcc9612227854e0689fdf",
+    "attention_adapted_sha256": "7fee09321ec7cf0ec83de8f0c6bc2f3df7ba166dd0c56170ce5b32728201a9de",
+    "attention_change": "attn_drop output .half() -> .to(v.dtype)",
+    "litela_rope": "original FP16 frequencies/cos/sin exactly expanded to FP32",
+    "dense_attention_rope": "original FP32 RoPE unchanged"
+  },
+  "loaded_parameters": 267218048,
+  "generated_buffers_not_loaded": [
+    "pos_embed"
+  ],
+  "weight_provenance": "checkpoint -> float16 -> exact float32 expansion",
+  "arithmetic_profile": "promoted-fp32",
+  "torch_version": "2.4.0+cpu",
+  "onnx_version": "1.17.0",
+  "exact_shared_input_expansion": true,
+  "native_forward_seconds": 19.567930679,
+  "export_completed": true,
+  "onnx_contract": {
+    "latent": {
+      "dtype": "float32",
+      "shape": [
+        2,
+        128,
+        3,
+        23,
+        40
+      ]
+    },
+    "timestep": {
+      "dtype": "float32",
+      "shape": [
+        2
+      ]
+    },
+    "cond_mask": {
+      "dtype": "float32",
+      "shape": [
+        1,
+        2760
+      ]
+    },
+    "flow_score": {
+      "dtype": "float32",
+      "shape": [
+        2
+      ]
+    },
+    "output": {
+      "dtype": "float32",
+      "shape": [
+        2,
+        128,
+        3,
+        23,
+        40
+      ]
+    }
+  },
+  "export_observation": "output only",
+  "artifacts": {
+    "denoiser.onnx": {
+      "bytes": 1060724290,
+      "sha256": "b4674295d5090abd8a56945257231237ef673813da78cec5ffbf9e8badca0b13"
+    },
+    "fixtures.npz": {
+      "bytes": 5664802,
+      "sha256": "960e1ea44dff288f4011cb0e30358207094a396bbdf60ce5181f539c43e6b13d"
+    },
+    "taps.json": {
+      "bytes": 3,
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    }
+  }
+}
