@@ -17,6 +17,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
 import types
 
 import numpy as np
@@ -24,6 +25,14 @@ import numpy as np
 SOURCE_COMMIT = "8d0a253c766b05a43ba408baf5e8f800a36be8b4"
 CHECKPOINT_SHA256 = "bc6a545302b342b87d83a4d78e9b74d47ca59fbf908fd8e13d9ecedbe1a37f2d"
 CHECKPOINT_BYTES = 1074370038
+
+
+def require_execution_device(requested, cuda_available):
+    if requested not in ("cpu", "cuda"):
+        raise ValueError("unknown qualification device")
+    if requested == "cuda" and not cuda_available:
+        raise RuntimeError("CUDA qualification requested, but no CUDA device is available")
+    return requested
 
 
 def verify_checkpoint(path: Path, expected_sha=CHECKPOINT_SHA256,
@@ -124,6 +133,9 @@ def run(args, report):
     import onnxruntime as ort
 
     root = args.upstream.resolve()
+    device = require_execution_device(args.device, torch.cuda.is_available())
+    report["execution"] = f"host-{device}-diagnostic"
+    report["device"] = torch.cuda.get_device_name(0) if device == "cuda" else "cpu"
     verify_source(root)
     report["checkpoint_sha256"] = verify_checkpoint(args.checkpoint)
     report["optional_cuda_kernels_disabled"] = not torch.cuda.is_available()
@@ -164,17 +176,28 @@ def run(args, report):
             return self.original(latent, timestep, latent[:1, :, :1],
                                  self.unused_prompt, cond_mask, flow_score, mask=None)
 
-    wrapper = Denoiser(model).eval()
+    wrapper = Denoiser(model).eval().to(device)
     cond = torch.zeros(1, 2760)
     cond[:, :920] = 1
     latent = torch.randn(1, 128, 3, 23, 40).half().repeat(2, 1, 1, 1, 1)
     inputs = (latent, torch.tensor([500., 500.]).half(), cond, torch.tensor([2., 2.]).half())
+    inputs = tuple(value.to(device) for value in inputs)
     names = ["latent", "timestep", "cond_mask", "flow_score"]
     with torch.inference_mode():
+        if device == "cuda":
+            torch.backends.cuda.matmul.allow_tf32 = False
+            torch.backends.cudnn.allow_tf32 = False
+            torch.cuda.synchronize()
+        started = time.monotonic()
+        print(f"Running original full-shape forward on {device}", flush=True)
         reference = wrapper(*inputs).float().cpu().numpy()
         if reference.shape != (2, 128, 3, 23, 40) or not np.isfinite(reference).all():
             raise ValueError("real checkpoint forward output has wrong shape or nonfinite values")
         report["pytorch_full_shape_forward"] = True
+        report["pytorch_forward_seconds"] = time.monotonic() - started
+        args.report.parent.mkdir(parents=True, exist_ok=True)
+        args.report.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
+        print(f"Full-shape reference passed in {report['pytorch_forward_seconds']:.2f}s", flush=True)
         # Only a measured invariance is reported; no prompt support is invented.
         wrapper.unused_prompt.normal_()
         changed_prompt = wrapper(*inputs).float().cpu().numpy()
@@ -183,6 +206,7 @@ def run(args, report):
             raise ValueError("prompt affects this checkpoint; the image-only export contract is invalid")
         wrapper.unused_prompt.zero_()
         del changed_prompt
+        args.report.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
         args.onnx.parent.mkdir(parents=True, exist_ok=True)
         print("Exporting the original denoiser", flush=True)
         torch.onnx.export(wrapper, inputs, str(args.onnx), input_names=names,
@@ -190,6 +214,8 @@ def run(args, report):
     arrays = {name: value.cpu().numpy() for name, value in zip(names, inputs)}
     del wrapper, model, inputs, latent, cond
     gc.collect()
+    if device == "cuda":
+        torch.cuda.empty_cache()
     graph = onnx.load(str(args.onnx), load_external_data=False)
     onnx.checker.check_model(str(args.onnx))
     contract = {}
@@ -222,15 +248,20 @@ def main():
     parser.add_argument("--onnx", type=Path, required=True)
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--threads", type=int, default=4)
+    parser.add_argument("--device", choices=("cpu", "cuda"), default="cpu",
+                        help="reference/export device; CUDA is a host diagnostic, never an Adreno claim")
     args = parser.parse_args()
     if not 1 <= args.threads <= 16:
         parser.error("threads must be between 1 and 16")
     report = {"format": "mobilei2v-upstream-qualification-v1", "source_commit": SOURCE_COMMIT,
-              "execution": "host-cpu-diagnostic", "denoiser_qualification_passed": False,
+              "execution": f"host-{args.device}-diagnostic", "requested_reference_device": args.device,
+              "denoiser_qualification_passed": False,
               "android_gpu_pack_ready": False,
               "remaining": ["VAE artifact provenance and encode/decode parity", "MNN conversion parity",
                             "actual Adreno execution", "image-to-video quality acceptance"]}
     try:
+        args.report.parent.mkdir(parents=True, exist_ok=True)
+        args.report.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
         run(args, report)
     except Exception as error:
         report["error"] = f"{type(error).__name__}: {error}"

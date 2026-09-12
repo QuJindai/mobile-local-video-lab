@@ -48,6 +48,12 @@ vanilla-attention implementations and learned weights remain the originals.
 The report records this adaptation. This host diagnostic does not enable a CPU
 production backend on Android.
 
+The same qualifier accepts `--device cuda` for a CUDA reference/export host;
+ONNX Runtime comparison still uses CPU. It rejects unavailable CUDA instead
+of silently falling back. CUDA reports are host diagnostics and do not qualify
+Adreno. Intermediate negative reports and forward timings preserve progress
+when a long reference run cannot complete.
+
 The qualifier always reports `android_gpu_pack_ready=false`. Even a successful
 denoiser-only export still leaves the following acceptance incomplete:
 

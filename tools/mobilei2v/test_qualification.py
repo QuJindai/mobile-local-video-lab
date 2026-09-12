@@ -9,6 +9,14 @@ import qualify_upstream as qualification
 
 
 class QualificationTest(unittest.TestCase):
+    def test_requested_gpu_never_silently_becomes_cpu(self):
+        self.assertEqual(qualification.require_execution_device("cpu", False), "cpu")
+        self.assertEqual(qualification.require_execution_device("cuda", True), "cuda")
+        with self.assertRaisesRegex(RuntimeError, "CUDA"):
+            qualification.require_execution_device("cuda", False)
+        with self.assertRaises(ValueError):
+            qualification.require_execution_device("unknown", True)
+
     def test_checks_bytes_and_hash_before_loading_checkpoint(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "weights.pth"
