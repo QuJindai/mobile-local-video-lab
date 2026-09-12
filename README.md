@@ -1,4 +1,4 @@
-> V0.7.1 手机测试版：[本机测试说明](docs/V0.7.1_HANDSET_TEST.md)。修复 Android 接口和诊断导出；MobileI2V 完整模型包及出片验收尚未完成。
+> V0.8.0 运镜工作台：[本机测试说明](docs/V0.8.0_HANDSET_TEST.md)。新增弧线环绕、升降、拉远、三档强度、往返循环与更长视频；修复 RIFE 末段停帧。MobileI2V 完整模型包及出片验收尚未完成。
 
 # Mobile Local Video Lab
 
@@ -6,8 +6,9 @@ Android/Snapdragon experiments for fully offline neural video generation.
 
 ## Current priority: real MobileI2V integration
 
-Model execution and conversion acceptance now precede scene expansion and the
-next APK delivery. The baseline VAE encoder and decoder passed full-resolution
+MobileI2V model execution and conversion acceptance remain an active integration
+track. The user-requested V0.8 feature branch improves the already executable
+Depth/RIFE workflow while retaining MobileI2V gates. The baseline VAE encoder and decoder passed full-resolution
 PyTorch/ONNX and MNN CPU parity on 2026-09-12; the qualified MNN CPU setting
 disables Winograd. The real denoiser runs and exports, but its FP16 numerical
 comparison failed; MobileI2V remains **NOT READY**. Denoiser conversion and

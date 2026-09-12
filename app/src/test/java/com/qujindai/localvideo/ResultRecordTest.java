@@ -35,4 +35,23 @@ public class ResultRecordTest {
         assertEquals(0L, record.createdAtMs);
         assertEquals(0L, record.durationMs);
     }
+
+    @Test
+    public void readsExistingSevenFieldHistory() {
+        ResultRecord old = ResultRecord.decode("1000|2125|720|512|17|8|Y29udGVudDovL3ZpZGVvLzE");
+        assertNotNull(old);
+        assertEquals("content://video/1", old.uri);
+        assertEquals("", old.recipe);
+    }
+
+    @Test
+    public void loopRecipeKeepsUnicodeAndSeparatorsAcrossRestart() {
+        ResultRecord source = new ResultRecord("content://video/2", 1, 8000, 720, 512, 64, 8,
+                "Depth 弧线环绕 | 标准 · 往返循环");
+        ResultRecord restored = ResultRecord.decode(source.encode());
+        assertNotNull(restored);
+        assertEquals(source.recipe, restored.recipe);
+        assertEquals(64, restored.frames);
+        assertEquals(8000L, restored.durationMs);
+    }
 }

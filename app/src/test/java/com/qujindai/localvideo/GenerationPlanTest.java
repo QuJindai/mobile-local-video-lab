@@ -14,9 +14,15 @@ public class GenerationPlanTest {
         assertEquals(8, plan.getFps());
     }
 
+    @Test
+    public void loopPlanAcceptsEvenFramesAndReportsActualDuration() {
+        GenerationPlan plan = new GenerationPlan(512, 512, 32, 8);
+        assertEquals(4.0, plan.getDurationSeconds(), 0.00001);
+    }
+
     @Test(expected = IllegalArgumentException.class)
-    public void rejectsEvenFrameCount() {
-        new GenerationPlan(512, 512, 16, 8);
+    public void rejectsTooFewFrames() {
+        new GenerationPlan(512, 512, 2, 8);
     }
 
     @Test(expected = IllegalArgumentException.class)

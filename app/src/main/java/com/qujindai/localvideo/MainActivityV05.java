@@ -18,6 +18,7 @@ import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -34,7 +35,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * V0.7.1 handset workbench.
+ * V0.8.0 handset workbench.
  *
  * RIFE is the validated baseline, Depth 3D is a genuine second local model path,
  * and MobileI2V remains blocked until a compatible model pack passes its gates.
@@ -75,6 +76,13 @@ public final class MainActivityV05 extends Activity {
     private Spinner fpsSpinner;
     private Spinner rifeMotionSpinner;
     private Spinner depthMotionSpinner;
+    private Spinner depthStrengthSpinner;
+    private CheckBox loopCheckBox;
+    private TextView framesLabel;
+    private TextView rifeMotionLabel;
+    private TextView depthMotionLabel;
+    private TextView depthStrengthLabel;
+    private TextView motionSummary;
     private TextView backendStatusView;
     private TextView mobilePackView;
     private TextView checkpointDownloadView;
@@ -106,6 +114,8 @@ public final class MainActivityV05 extends Activity {
     private Button diagnosticsButton;
     private LinearLayout resultCard;
     private LinearLayout historyContainer;
+    private LinearLayout modelDetailsPanel;
+    private Button modelDetailsToggle;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -139,6 +149,21 @@ public final class MainActivityV05 extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(16), dp(18), dp(16), dp(44));
+        scroll.setOnApplyWindowInsetsListener((view, insets) -> {
+            if (Build.VERSION.SDK_INT >= 30) {
+                android.graphics.Insets bars = insets.getInsets(
+                        android.view.WindowInsets.Type.systemBars()
+                                | android.view.WindowInsets.Type.displayCutout());
+                root.setPadding(dp(16) + bars.left, dp(18) + bars.top,
+                        dp(16) + bars.right, dp(24) + bars.bottom);
+            } else {
+                root.setPadding(dp(16) + insets.getSystemWindowInsetLeft(),
+                        dp(18) + insets.getSystemWindowInsetTop(),
+                        dp(16) + insets.getSystemWindowInsetRight(),
+                        dp(24) + insets.getSystemWindowInsetBottom());
+            }
+            return insets;
+        });
         scroll.addView(root, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -148,7 +173,7 @@ public final class MainActivityV05 extends Activity {
         TextView title = text("Local Video Lab", 25, true);
         titleRow.addView(title, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        TextView badge = text("V0.7.1", 12, true);
+        TextView badge = text("V0.8.0", 12, true);
         badge.setTextColor(Color.WHITE);
         badge.setGravity(Gravity.CENTER);
         badge.setBackground(rounded(COLOR_ACCENT, 20));
@@ -157,8 +182,8 @@ public final class MainActivityV05 extends Activity {
         root.addView(titleRow);
 
         TextView subtitle = text(
-                "端侧生成 · 模型支持双源下载\n"
-                        + "RIFE · Depth 3D · MobileI2V Adreno GPU / MNN OpenCL",
+                "本地运镜工作台 · 多段轨迹 · 往返循环\n"
+                        + "RIFE · Depth 3D · MobileI2V 模型接入",
                 14, false);
         subtitle.setTextColor(COLOR_MUTED);
         root.addView(subtitle);
@@ -222,9 +247,19 @@ public final class MainActivityV05 extends Activity {
         backendStatusView = text("", 13, true);
         card.addView(backendStatusView);
 
+        modelDetailsToggle = textAction("展开模型下载与设备信息");
+        card.addView(modelDetailsToggle);
+        modelDetailsPanel = new LinearLayout(this);
+        modelDetailsPanel.setOrientation(LinearLayout.VERTICAL);
+        modelDetailsPanel.setVisibility(View.GONE);
+        card.addView(modelDetailsPanel);
+        modelDetailsToggle.setOnClickListener(v -> setModelDetailsExpanded(
+                modelDetailsPanel.getVisibility() != View.VISIBLE));
+        card = modelDetailsPanel;
+
         TextView depthDescription = text(
-                "Depth 3D 会先用 Depth Anything V2 Q4 在手机本地估深，再按深度构造分层视差端点，"
-                        + "最后由 RIFE 生成连续中间帧。它是真实第二模型链路，但不是扩散式语义 I2V。",
+                "Depth 3D 在手机本地估深，生成五个运镜关键帧，再由 RIFE 补帧。"
+                        + "可调整视角、强度和时长；画面内容与主体动作来自原图。",
                 12, false);
         depthDescription.setTextColor(COLOR_MUTED);
         card.addView(depthDescription);
@@ -285,6 +320,7 @@ public final class MainActivityV05 extends Activity {
         backendSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                if (position == 2) setModelDetailsExpanded(true);
                 refreshBackendStatus();
                 applyUiState();
             }
@@ -293,6 +329,11 @@ public final class MainActivityV05 extends Activity {
             public void onNothingSelected(AdapterView<?> parent) {
             }
         });
+    }
+
+    private void setModelDetailsExpanded(boolean expanded) {
+        modelDetailsPanel.setVisibility(expanded ? View.VISIBLE : View.GONE);
+        modelDetailsToggle.setText(expanded ? "收起模型下载与设备信息" : "展开模型下载与设备信息");
     }
 
     private void buildInputCard(LinearLayout root) {
@@ -339,36 +380,72 @@ public final class MainActivityV05 extends Activity {
         root.addView(card, cardParams());
         card.addView(sectionTitle("2  生成参数"));
 
-        framesSpinner = spinner(new String[] { "9 帧 · 快速", "17 帧 · 推荐" }, 1);
-        fpsSpinner = spinner(new String[] { "6 FPS", "8 FPS · 推荐", "12 FPS" }, 1);
+        framesSpinner = spinner(new String[] { "9 帧 · 快速", "17 帧", "33 帧 · 推荐", "49 帧 · 更长" },
+                savedMotionIndex("frames", 2, 4));
+        fpsSpinner = spinner(new String[] { "6 FPS", "8 FPS · 推荐", "12 FPS" },
+                savedMotionIndex("fps", 1, 3));
         rifeMotionSpinner = spinner(new String[] {
                 "电影自动 · 推荐",
                 "推近",
                 "向左平移",
                 "向上漂移"
-        }, 0);
+        }, savedMotionIndex("rife", 0, 4));
         depthMotionSpinner = spinner(new String[] {
-                "3D 向左视差 · 推荐",
+                "3D 向左视差",
                 "3D 向右视差",
-                "3D 推近"
-        }, 0);
+                "3D 推近",
+                "弧线环绕 · 新增",
+                "升降摇臂 · 新增",
+                "缓缓拉远 · 新增"
+        }, savedMotionIndex("depth", 3, 6));
+        depthStrengthSpinner = spinner(new String[] { "轻柔 · 适合人像", "标准", "明显 · 裁切更多" },
+                savedMotionIndex("strength", 1, 3));
 
-        card.addView(label("帧数"));
+        framesLabel = label("单程帧数");
+        card.addView(framesLabel);
         card.addView(framesSpinner);
         card.addView(label("播放速度"));
         card.addView(fpsSpinner);
 
-        card.addView(label("RIFE 二维单图运动"));
+        rifeMotionLabel = label("RIFE 二维单图运动");
+        card.addView(rifeMotionLabel);
         card.addView(rifeMotionSpinner);
         rifeMotionHint = text("仅 RIFE 单图模式生效。", 12, false);
         rifeMotionHint.setTextColor(COLOR_MUTED);
         card.addView(rifeMotionHint);
 
-        card.addView(label("Depth 3D 运动"));
+        depthMotionLabel = label("Depth 3D 运镜轨迹");
+        card.addView(depthMotionLabel);
         card.addView(depthMotionSpinner);
-        depthMotionHint = text("深度越近的区域位移/缩放越大，形成真实分层视差。", 12, false);
+        depthStrengthLabel = label("运镜强度");
+        card.addView(depthStrengthLabel);
+        card.addView(depthStrengthSpinner);
+        depthMotionHint = text("", 12, false);
         depthMotionHint.setTextColor(COLOR_MUTED);
         card.addView(depthMotionHint);
+        loopCheckBox = new CheckBox(this);
+        loopCheckBox.setText("往返循环 · 自动返回起点");
+        loopCheckBox.setTextColor(0xff263238);
+        loopCheckBox.setChecked(getSharedPreferences("motion_studio", MODE_PRIVATE)
+                .getBoolean("loop", false));
+        card.addView(loopCheckBox);
+        motionSummary = text("", 13, true);
+        motionSummary.setTextColor(COLOR_ACCENT_DARK);
+        card.addView(motionSummary);
+
+        AdapterView.OnItemSelectedListener changed = new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                updateMotionSummary();
+                saveMotionSettings();
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        };
+        for (Spinner control : new Spinner[] {framesSpinner, fpsSpinner, rifeMotionSpinner,
+                depthMotionSpinner, depthStrengthSpinner}) control.setOnItemSelectedListener(changed);
+        loopCheckBox.setOnCheckedChangeListener((button, checked) -> {
+            updateMotionSummary();
+            saveMotionSettings();
+        });
     }
 
     private void buildResultCard(LinearLayout root) {
@@ -473,7 +550,7 @@ public final class MainActivityV05 extends Activity {
                     applyUiState();
                 });
             } catch (Throwable error) {
-                String diag = "Local Video Lab V0.7.1 · MobileI2V checkpoint download\n"
+                String diag = "Local Video Lab V0.8.0 · MobileI2V checkpoint download\n"
                         + source.label + "\n" + error.getClass().getName() + "\n" + safeMessage(error);
                 runOnUiThread(() -> {
                     checkpointDownloading = false;
@@ -582,7 +659,7 @@ public final class MainActivityV05 extends Activity {
                     applyUiState();
                 });
             } catch (Throwable error) {
-                String diag = "Local Video Lab V0.7.1 · model pack install\n"
+                String diag = "Local Video Lab V0.8.0 · model pack install\n"
                         + error.getClass().getName() + "\n" + safeMessage(error);
                 runOnUiThread(() -> {
                     modelInstalling = false;
@@ -621,17 +698,12 @@ public final class MainActivityV05 extends Activity {
             return;
         }
 
-        final int frames = backend == BackendRouter.Backend.MOBILE_I2V
-                ? MobileI2VGpuNative.OUTPUT_FRAMES
-                : (framesSpinner.getSelectedItemPosition() == 0 ? 9 : 17);
-        final int fps;
-        switch (fpsSpinner.getSelectedItemPosition()) {
-            case 0: fps = 6; break;
-            case 2: fps = 12; break;
-            default: fps = 8; break;
-        }
+        final int frames = selectedFrameCount();
+        final int fps = selectedFps();
         final MotionSpec.Preset rifePreset = selectedRifePreset();
         final DepthMotionSpec.Preset depthPreset = selectedDepthPreset();
+        final DepthMotionSpec.Strength strength = selectedDepthStrength();
+        final boolean pingPong = backend != BackendRouter.Backend.MOBILE_I2V && loopCheckBox.isChecked();
 
         phase = UiStatePolicy.Phase.GENERATING;
         progressBar.setProgress(0);
@@ -652,7 +724,8 @@ public final class MainActivityV05 extends Activity {
                     ResultRecord record = new ResultRecord(
                             mobileResult.uri.toString(), System.currentTimeMillis(), durationMs,
                             mobileResult.width, mobileResult.height,
-                            mobileResult.frames, mobileResult.fps);
+                            mobileResult.frames, mobileResult.fps,
+                            "MobileI2V · seed=" + mobileResult.seed);
                     lastRecord = record;
                     lastVideoUri = mobileResult.uri;
                     historyStore.record(record);
@@ -674,11 +747,11 @@ public final class MainActivityV05 extends Activity {
                 RifeEngine.Result result;
                 if (backend == BackendRouter.Backend.DEPTH_RIFE) {
                     result = engine.generateDepthMotion(
-                            primaryUri, frames, fps, depthPreset,
+                            primaryUri, frames, fps, depthPreset, strength, pingPong,
                             (percent, message) -> publishProgress(percent, message));
                 } else {
                     result = engine.generate(
-                            primaryUri, secondaryUri, frames, fps, rifePreset,
+                            primaryUri, secondaryUri, frames, fps, rifePreset, pingPong,
                             (percent, message) -> publishProgress(percent, message));
                 }
 
@@ -686,7 +759,7 @@ public final class MainActivityV05 extends Activity {
                 long durationMs = Math.max(1L, result.frames * 1000L / Math.max(1, result.fps));
                 ResultRecord record = new ResultRecord(
                         result.uri.toString(), System.currentTimeMillis(), durationMs,
-                        result.width, result.height, result.frames, result.fps);
+                        result.width, result.height, result.frames, result.fps, resultRecipe(result));
                 lastRecord = record;
                 lastVideoUri = result.uri;
                 historyStore.record(record);
@@ -868,6 +941,8 @@ public final class MainActivityV05 extends Activity {
         primaryButton.setEnabled(!busy);
         backendSpinner.setEnabled(!busy);
         framesSpinner.setEnabled(!busy && !mobile);
+        framesSpinner.setVisibility(mobile ? View.GONE : View.VISIBLE);
+        framesLabel.setVisibility(mobile ? View.GONE : View.VISIBLE);
         fpsSpinner.setEnabled(!busy);
         importModelButton.setEnabled(!busy);
         downloadOfficialButton.setEnabled(!busy);
@@ -882,12 +957,20 @@ public final class MainActivityV05 extends Activity {
         secondaryButton.setEnabled(!busy);
 
         rifeMotionSpinner.setVisibility(rife ? View.VISIBLE : View.GONE);
+        rifeMotionLabel.setVisibility(rife ? View.VISIBLE : View.GONE);
         rifeMotionHint.setVisibility(rife ? View.VISIBLE : View.GONE);
         rifeMotionSpinner.setEnabled(!busy && secondaryUri == null);
 
         depthMotionSpinner.setVisibility(depth ? View.VISIBLE : View.GONE);
+        depthMotionLabel.setVisibility(depth ? View.VISIBLE : View.GONE);
+        depthStrengthLabel.setVisibility(depth ? View.VISIBLE : View.GONE);
+        depthStrengthSpinner.setVisibility(depth ? View.VISIBLE : View.GONE);
+        depthStrengthSpinner.setEnabled(!busy);
         depthMotionHint.setVisibility(depth ? View.VISIBLE : View.GONE);
         depthMotionSpinner.setEnabled(!busy);
+        loopCheckBox.setVisibility(mobile ? View.GONE : View.VISIBLE);
+        loopCheckBox.setEnabled(!busy);
+        updateMotionSummary();
 
         openButton.setEnabled(lastVideoUri != null);
         shareButton.setEnabled(lastVideoUri != null);
@@ -907,8 +990,59 @@ public final class MainActivityV05 extends Activity {
         switch (depthMotionSpinner.getSelectedItemPosition()) {
             case 1: return DepthMotionSpec.Preset.PARALLAX_RIGHT;
             case 2: return DepthMotionSpec.Preset.DOLLY_IN;
+            case 3: return DepthMotionSpec.Preset.ARC_ORBIT;
+            case 4: return DepthMotionSpec.Preset.CRANE_UP;
+            case 5: return DepthMotionSpec.Preset.DOLLY_OUT;
             default: return DepthMotionSpec.Preset.PARALLAX_LEFT;
         }
+    }
+
+    private DepthMotionSpec.Strength selectedDepthStrength() {
+        return DepthMotionSpec.Strength.values()[depthStrengthSpinner.getSelectedItemPosition()];
+    }
+
+    private int selectedFrameCount() {
+        if (selectedBackend() == BackendRouter.Backend.MOBILE_I2V) return MobileI2VGpuNative.OUTPUT_FRAMES;
+        return new int[] {9, 17, 33, 49}[framesSpinner.getSelectedItemPosition()];
+    }
+
+    private int selectedFps() {
+        return new int[] {6, 8, 12}[fpsSpinner.getSelectedItemPosition()];
+    }
+
+    private void updateMotionSummary() {
+        if (motionSummary == null) return;
+        boolean mobile = selectedBackend() == BackendRouter.Backend.MOBILE_I2V;
+        boolean looping = !mobile && loopCheckBox.isChecked();
+        int output = FrameSequence.outputCount(selectedFrameCount(), looping);
+        motionSummary.setText(String.format(Locale.US, "%s%d 帧 · %.2f 秒 · %d FPS%s",
+                mobile ? "MobileI2V 固定 " : "输出 ", output, output / (double) selectedFps(),
+                selectedFps(), looping ? "\n往返一次，可循环播放" : ""));
+        String hint;
+        switch (selectedDepthPreset()) {
+            case ARC_ORBIT: hint = "沿弧线横移并抬升，中段转向，形成分层环绕感。"; break;
+            case CRANE_UP: hint = "视角缓缓抬升，带少量侧移和推近。"; break;
+            case DOLLY_OUT: hint = "从局部近景缓缓拉远，露出更多原图。"; break;
+            case DOLLY_IN: hint = "逐渐靠近主体，近处区域放大更多。"; break;
+            default: hint = "近处区域移动更多，形成前后层次视差。"; break;
+        }
+        depthMotionHint.setText(hint + " 五关键帧运镜会预留裁切边缘。较长视频生成更久。");
+    }
+
+    private int savedMotionIndex(String key, int fallback, int count) {
+        int value = getSharedPreferences("motion_studio", MODE_PRIVATE).getInt(key, fallback);
+        return value >= 0 && value < count ? value : fallback;
+    }
+
+    private void saveMotionSettings() {
+        if (loopCheckBox == null) return;
+        getSharedPreferences("motion_studio", MODE_PRIVATE).edit()
+                .putInt("frames", framesSpinner.getSelectedItemPosition())
+                .putInt("fps", fpsSpinner.getSelectedItemPosition())
+                .putInt("rife", rifeMotionSpinner.getSelectedItemPosition())
+                .putInt("depth", depthMotionSpinner.getSelectedItemPosition())
+                .putInt("strength", depthStrengthSpinner.getSelectedItemPosition())
+                .putBoolean("loop", loopCheckBox.isChecked()).apply();
     }
 
     private void showResult(ResultRecord record, boolean newlyGenerated) {
@@ -1029,7 +1163,7 @@ public final class MainActivityV05 extends Activity {
     private void shareDiagnostics() {
         Intent intent = new Intent(Intent.ACTION_SEND);
         intent.setType("text/plain");
-        intent.putExtra(Intent.EXTRA_SUBJECT, "Local Video Lab V0.7.1 diagnostics");
+        intent.putExtra(Intent.EXTRA_SUBJECT, "Local Video Lab V0.8.0 diagnostics");
         intent.putExtra(Intent.EXTRA_TEXT, handsetDiagnostics());
         try {
             startActivity(Intent.createChooser(intent, "导出诊断信息"));
@@ -1040,8 +1174,8 @@ public final class MainActivityV05 extends Activity {
 
     private String handsetDiagnostics() {
         BackendRouter.Decision decision = currentBackendDecision();
-        return "Local Video Lab V0.7.1 · handset test\n"
-                + "package=com.qujindai.localvideo · versionCode=8\n"
+        return "Local Video Lab V0.8.0 · handset test\n"
+                + "package=com.qujindai.localvideo · versionCode=9\n"
                 + "设备=" + Build.MANUFACTURER + " " + Build.MODEL + "\n"
                 + "Android API=" + Build.VERSION.SDK_INT + "\n"
                 + (capabilities == null ? "设备能力未探测" : capabilities.summary()) + "\n"
@@ -1061,19 +1195,12 @@ public final class MainActivityV05 extends Activity {
     }
 
     private String formatMetrics(RifeEngine.Result result, int thermalBefore, int thermalAfter) {
-        String mode;
-        if (result.depthPreset != null) {
-            mode = "Depth 3D · " + depthPresetName(result.depthPreset);
-        } else if (result.singleImageMode) {
-            mode = "RIFE 单图 · " + rifePresetName(result.motionPreset);
-        } else {
-            mode = "RIFE 双图插值";
-        }
+        String mode = resultRecipe(result);
         String preprocessing = result.preprocessingMs > 0
                 ? String.format(Locale.US, "\n估深预处理: %.2f s", result.preprocessingMs / 1000.0)
                 : "";
         return String.format(Locale.US,
-                "Local Video Lab V0.7.1\n"
+                "Local Video Lab V0.8.0\n"
                         + "后端: %s\n"
                         + "模式: %s\n"
                         + "输出: %dx%d · %d 帧 · %d FPS\n"
@@ -1091,9 +1218,17 @@ public final class MainActivityV05 extends Activity {
                 Debug.getNativeHeapAllocatedSize() / 1048576.0);
     }
 
+    private static String resultRecipe(RifeEngine.Result result) {
+        String path = result.depthPreset != null
+                ? "Depth 3D · " + depthPresetName(result.depthPreset) + " · " + result.depthStrength.label
+                        + " · " + result.keyframeCount + " 关键帧"
+                : (result.singleImageMode ? "RIFE 单图 · " + rifePresetName(result.motionPreset) : "RIFE 双图插值");
+        return path + (result.pingPong ? " · 往返循环" : " · 单程");
+    }
+
     private String formatError(Throwable error) {
         return String.format(Locale.US,
-                "Local Video Lab V0.7.1\n"
+                "Local Video Lab V0.8.0\n"
                         + "状态: 生成失败\n"
                         + "后端: %s\n"
                         + "异常: %s\n"
@@ -1127,7 +1262,8 @@ public final class MainActivityV05 extends Activity {
                 : "时长未知";
         if (record.width > 0 && record.height > 0) {
             return String.format(Locale.US, "%s · %s\n%d×%d · %d 帧 · %d FPS",
-                    time, duration, record.width, record.height, record.frames, record.fps);
+                    time, duration, record.width, record.height, record.frames, record.fps)
+                    + (record.recipe.isEmpty() ? "" : "\n" + record.recipe);
         }
         return time + " · " + duration;
     }
@@ -1142,7 +1278,8 @@ public final class MainActivityV05 extends Activity {
                 : "--";
         if (record.width > 0) {
             return String.format(Locale.US, "%s · %s\n%s · %d×%d · %d帧/%dFPS",
-                    prefix, time, duration, record.width, record.height, record.frames, record.fps);
+                    prefix, time, duration, record.width, record.height, record.frames, record.fps)
+                    + (record.recipe.isEmpty() ? "" : "\n" + record.recipe);
         }
         return prefix + " · " + time + "\n点击载入";
     }
@@ -1169,6 +1306,9 @@ public final class MainActivityV05 extends Activity {
         switch (preset) {
             case PARALLAX_RIGHT: return "3D 向右视差";
             case DOLLY_IN: return "3D 推近";
+            case ARC_ORBIT: return "弧线环绕";
+            case CRANE_UP: return "升降摇臂";
+            case DOLLY_OUT: return "缓缓拉远";
             case PARALLAX_LEFT:
             default: return "3D 向左视差";
         }

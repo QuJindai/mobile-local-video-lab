@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RIFE_COMMIT="a7532fc3f9f8f008cd6eecd6f2ffe2a9698e0cf7"
+RIFE_TOOLS="$ROOT/tools/rife"
 DEPS="$ROOT/.deps"
 SRC="$DEPS/rife-ncnn-vulkan"
 BUILD="$DEPS/rife-build"
@@ -18,6 +19,22 @@ mkdir -p "$DEPS" "$JNI_DIR" "$ASSET_DIR" "$MANIFEST_DIR"
 git clone https://github.com/nihui/rife-ncnn-vulkan.git "$SRC"
 git -C "$SRC" checkout "$RIFE_COMMIT"
 git -C "$SRC" submodule update --init --recursive
+
+# Verify patching against this exact checkout before modifying its main.cpp.
+python3 "$RIFE_TOOLS/test_patch_main.py" "$SRC/src/main.cpp"
+cp "$RIFE_TOOLS/face_re_frame_schedule.h" "$SRC/src/face_re_frame_schedule.h"
+python3 "$RIFE_TOOLS/patch_main.py" "$SRC/src/main.cpp"
+
+# Test the copied production header in Release mode before Android CMake.
+# /tmp is executable even when the checkout is on a noexec /dev/shm mount.
+RIFE_HOST_TEST_DIR="$(mktemp -d /tmp/face-re-rife-tests.XXXXXX)"
+trap 'rm -rf "$RIFE_HOST_TEST_DIR"' EXIT
+"${HOST_CXX:-c++}" -std=c++11 -O2 -DNDEBUG -Wall -Wextra -Werror \
+  -I "$SRC/src" "$RIFE_TOOLS/test_frame_schedule.cpp" \
+  -o "$RIFE_HOST_TEST_DIR/test_frame_schedule"
+"$RIFE_HOST_TEST_DIR/test_frame_schedule"
+rm -rf "$RIFE_HOST_TEST_DIR"
+trap - EXIT
 
 cmake -S "$SRC/src" -B "$BUILD" -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
@@ -55,6 +72,8 @@ fi
   echo "abi=arm64-v8a"
   echo "android_platform=28"
   echo "flexible_page_sizes=ON"
+  echo "frame_schedule=endpoint-inclusive-v1"
+  echo "frame_schedule_position=i*(input_count-1)/(output_count-1)"
   sha256sum "$JNI_DIR/librife.so" "$ASSET_DIR/flownet.param" "$ASSET_DIR/flownet.bin"
 } > "$MANIFEST_DIR/runtime-manifest.txt"
 

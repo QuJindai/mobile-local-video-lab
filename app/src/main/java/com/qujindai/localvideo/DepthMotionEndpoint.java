@@ -9,6 +9,11 @@ public final class DepthMotionEndpoint {
             Bitmap source,
             DepthAnythingEngine.DepthMap depth,
             DepthMotionSpec.Preset preset) {
+        return create(source, depth, DepthMotionSpec.at(preset, DepthMotionSpec.Strength.NORMAL, 1f));
+    }
+
+    public static Bitmap create(Bitmap source, DepthAnythingEngine.DepthMap depth,
+                                DepthMotionSpec.Pose pose) {
         int width = source.getWidth();
         int height = source.getHeight();
         int[] input = new int[width * height];
@@ -22,9 +27,9 @@ public final class DepthMotionEndpoint {
             for (int x = 0; x < width; x++) {
                 float depthX = width <= 1 ? 0f : x * (depth.width - 1f) / (width - 1f);
                 float d = sampleDepth(depth, depthX, depthY);
-                float shiftX = DepthMotionSpec.displayShiftX(preset, d, width);
-                float shiftY = DepthMotionSpec.displayShiftY(preset, d, height);
-                float zoom = DepthMotionSpec.zoomScale(preset, d);
+                float shiftX = pose.shiftX(d, width);
+                float shiftY = pose.shiftY(d, height);
+                float zoom = pose.zoomScale(d);
 
                 float sx = cx + (x - shiftX - cx) / zoom;
                 float sy = cy + (y - shiftY - cy) / zoom;

@@ -8,6 +8,7 @@ on:
     branches:
       - main
       - feat/v071-handset-test
+      - feat/v080-motion-studio
   workflow_dispatch:
 
 permissions:
@@ -73,7 +74,7 @@ jobs:
           MAIN=app/src/main/java/com/qujindai/localvideo/MainActivityV05.java
           ENGINE=app/src/main/java/com/qujindai/localvideo/MobileI2VGpuEngine.java
           NATIVE=app/src/main/cpp/mobilei2v/mobilei2v_jni.cpp
-          grep -q 'V0.7' "$MAIN"
+          grep -q 'V0.8.0' "$MAIN"
           grep -q 'MobileI2VGpuEngine mobileEngine' "$MAIN"
           grep -q '开始 MobileI2V GPU 生成' "$MAIN"
           # Inspect only the generation button, including multiline expressions.
@@ -148,6 +149,18 @@ jobs:
           sudo apt-get install -y ninja-build
           echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
 
+      - name: Test Motion Studio paths, bounds and loop sequencing
+        shell: bash
+        run: |
+          mkdir -p /tmp/motion-studio-tests
+          javac -d /tmp/motion-studio-tests \
+            app/src/main/java/com/qujindai/localvideo/DepthMotionSpec.java \
+            app/src/main/java/com/qujindai/localvideo/GenerationPlan.java \
+            app/src/main/java/com/qujindai/localvideo/FrameSequence.java \
+            app/src/main/java/com/qujindai/localvideo/ResultRecord.java \
+            tools/motion/MotionStudioTest.java
+          java -cp /tmp/motion-studio-tests com.qujindai.localvideo.MotionStudioTest
+
       - name: Run JVM unit tests
         run: gradle :app:testDebugUnitTest --stacktrace
 
@@ -199,7 +212,7 @@ jobs:
       - name: Assemble debug APK
         run: gradle :app:assembleDebug --stacktrace
 
-      - name: Verify V0.7.1 APK runtime, models, launcher and signing
+      - name: Verify V0.8.0 APK runtime, models, launcher and signing
         shell: bash
         run: |
           set -euo pipefail
@@ -215,8 +228,8 @@ jobs:
             = '5d55b02762e1907589158af3e366bd61ddf648155852a07bbf5e3a074639fcf8'
 
           "$ANDROID_SDK_ROOT/build-tools/35.0.0/aapt" dump badging "$APK" | tee apk-badging.txt
-          grep "versionCode='8'" apk-badging.txt
-          grep "versionName='0.7.1'" apk-badging.txt
+          grep "versionCode='9'" apk-badging.txt
+          grep "versionName='0.8.0'" apk-badging.txt
           grep "launchable-activity: name='com.qujindai.localvideo.MainActivityV05'" apk-badging.txt
 
           "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee apk-signing.txt
@@ -255,7 +268,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: v0.7.1-jvm-test-results
+          name: v0.8.0-jvm-test-results
           path: app/build/test-results/testDebugUnitTest/
           if-no-files-found: warn
           retention-days: 30
@@ -263,7 +276,7 @@ jobs:
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: mobile-local-video-v0.7.1-handset-test-apk
+          name: mobile-local-video-v0.8.0-handset-test-apk
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             apk-sha256.txt

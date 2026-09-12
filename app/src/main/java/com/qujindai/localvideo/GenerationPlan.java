@@ -15,8 +15,8 @@ public final class GenerationPlan {
         if (Math.max(width, height) > MAX_LONG_EDGE) {
             throw new IllegalArgumentException("long edge exceeds mobile limit");
         }
-        if (frames < 3 || frames % 2 == 0) {
-            throw new IllegalArgumentException("frame count must be odd and >=3");
+        if (frames < 3) {
+            throw new IllegalArgumentException("frame count must be >=3");
         }
         if (fps < 4 || fps > 30) {
             throw new IllegalArgumentException("fps must be within 4..30");

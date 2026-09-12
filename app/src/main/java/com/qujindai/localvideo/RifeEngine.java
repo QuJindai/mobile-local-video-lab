@@ -35,10 +35,14 @@ public final class RifeEngine {
         public final MotionSpec.Preset motionPreset;
         public final DepthMotionSpec.Preset depthPreset;
         public final String backendLabel;
+        public final DepthMotionSpec.Strength depthStrength;
+        public final boolean pingPong;
+        public final int keyframeCount;
 
         Result(Uri uri, GenerationPlan plan, long elapsedMs, long preprocessingMs,
                boolean singleImageMode, MotionSpec.Preset motionPreset,
-               DepthMotionSpec.Preset depthPreset, String backendLabel) {
+               DepthMotionSpec.Preset depthPreset, String backendLabel,
+               DepthMotionSpec.Strength depthStrength, boolean pingPong, int keyframeCount) {
             this.uri = uri;
             this.frames = plan.getFrames();
             this.width = plan.getWidth();
@@ -50,6 +54,9 @@ public final class RifeEngine {
             this.motionPreset = motionPreset;
             this.depthPreset = depthPreset;
             this.backendLabel = backendLabel;
+            this.depthStrength = depthStrength;
+            this.pingPong = pingPong;
+            this.keyframeCount = keyframeCount;
         }
     }
 
@@ -67,6 +74,12 @@ public final class RifeEngine {
 
     public Result generate(Uri primaryUri, Uri secondaryUri, int frameCount, int fps,
                            MotionSpec.Preset motionPreset,
+                           ProgressListener listener) throws Exception {
+        return generate(primaryUri, secondaryUri, frameCount, fps, motionPreset, false, listener);
+    }
+
+    public Result generate(Uri primaryUri, Uri secondaryUri, int frameCount, int fps,
+                           MotionSpec.Preset motionPreset, boolean pingPong,
                            ProgressListener listener) throws Exception {
         long started = SystemClock.elapsedRealtime();
         progress(listener, 2, "校验本地 RIFE/ncnn/Vulkan 运行时");
@@ -96,7 +109,7 @@ public final class RifeEngine {
             return render(
                     runtime, primary, secondary, frameCount, fps, started, 0L,
                     singleImageMode, selectedPreset, null,
-                    "RIFE v4.6 / ncnn / Vulkan", 12, listener);
+                    "RIFE v4.6 / ncnn / Vulkan", 12, null, null, pingPong, listener);
         } finally {
             if (secondary != null && !secondary.isRecycled()) secondary.recycle();
             if (!primary.isRecycled()) primary.recycle();
@@ -109,6 +122,17 @@ public final class RifeEngine {
             int fps,
             DepthMotionSpec.Preset depthPreset,
             ProgressListener listener) throws Exception {
+        return generateDepthMotion(primaryUri, frameCount, fps, depthPreset,
+                DepthMotionSpec.Strength.NORMAL, false, listener);
+    }
+
+    public Result generateDepthMotion(Uri primaryUri, int frameCount, int fps,
+            DepthMotionSpec.Preset depthPreset, DepthMotionSpec.Strength strength,
+            boolean pingPong, ProgressListener listener) throws Exception {
+        if (frameCount < 9 || (frameCount - 1) % 4 != 0) {
+            throw new IllegalArgumentException("Depth paths require 4n+1 frames, at least 9");
+        }
+        if (strength == null) throw new IllegalArgumentException("motion strength required");
         long started = SystemClock.elapsedRealtime();
         progress(listener, 2, "校验 RIFE/ncnn/Vulkan 运行时");
         RuntimeBundle runtime = RuntimeBundle.installAndVerify(context);
@@ -117,22 +141,19 @@ public final class RifeEngine {
 
         progress(listener, 8, "读取并缩放输入图像");
         Bitmap primary = ImagePrep.loadScaled(context.getContentResolver(), primaryUri);
-        Bitmap endpoint = null;
         if (depthPreset == null) depthPreset = DepthMotionSpec.Preset.PARALLAX_LEFT;
         final DepthMotionSpec.Preset selectedPreset = depthPreset;
         try {
             progress(listener, 10, "Depth Anything V2 本地估深");
             DepthAnythingEngine.DepthMap depth = new DepthAnythingEngine(context).estimate(primary);
             progress(listener, 19, String.format(Locale.US,
-                    "估深完成 %.2f s · 构造分层 3D 运动端点", depth.elapsedMs / 1000.0));
-            endpoint = DepthMotionEndpoint.create(primary, depth, selectedPreset);
-            progress(listener, 23, "3D 端点完成 · 启动 RIFE 神经补帧");
+                    "估深完成 %.2f s · 构造五个运镜关键帧", depth.elapsedMs / 1000.0));
             return render(
-                    runtime, primary, endpoint, frameCount, fps, started, depth.elapsedMs,
+                    runtime, primary, null, frameCount, fps, started, depth.elapsedMs,
                     true, null, selectedPreset,
-                    "Depth Anything V2 Q4 / ONNX Runtime + RIFE v4.6", 23, listener);
+                    "Depth Anything V2 Q4 / ONNX Runtime + RIFE v4.6", 23,
+                    depth, strength, pingPong, listener);
         } finally {
-            if (endpoint != null && !endpoint.isRecycled()) endpoint.recycle();
             if (!primary.isRecycled()) primary.recycle();
         }
     }
@@ -150,18 +171,36 @@ public final class RifeEngine {
             DepthMotionSpec.Preset depthPreset,
             String backendLabel,
             int rifeProgressStart,
+            DepthAnythingEngine.DepthMap depth,
+            DepthMotionSpec.Strength strength,
+            boolean pingPong,
             ProgressListener listener) throws Exception {
         File jobDir = new File(context.getCacheDir(), "rife-job-" + SystemClock.elapsedRealtime());
         try {
             GenerationPlan plan = new GenerationPlan(
-                    primary.getWidth(), primary.getHeight(), frameCount, fps);
+                    primary.getWidth(), primary.getHeight(),
+                    FrameSequence.outputCount(frameCount, pingPong), fps);
             File inputDir = new File(jobDir, "input");
             File framesDir = new File(jobDir, "frames");
             if (!inputDir.mkdirs() || !framesDir.mkdirs()) {
                 throw new IOException("cannot create generation workspace");
             }
-            ImagePrep.writePng(primary, new File(inputDir, "00000001.png"));
-            ImagePrep.writePng(secondary, new File(inputDir, "00000002.png"));
+            if (depth != null) {
+                for (int i = 0; i < 5; i++) {
+                    Bitmap keyframe = DepthMotionEndpoint.create(primary, depth,
+                            DepthMotionSpec.at(depthPreset, strength, i / 4f));
+                    try {
+                        ImagePrep.writePng(keyframe, new File(inputDir,
+                                String.format(Locale.US, "%08d.png", i + 1)));
+                    } finally {
+                        keyframe.recycle();
+                    }
+                    progress(listener, 19 + i, "深度运镜关键帧 " + (i + 1) + "/5");
+                }
+            } else {
+                ImagePrep.writePng(primary, new File(inputDir, "00000001.png"));
+                ImagePrep.writePng(secondary, new File(inputDir, "00000002.png"));
+            }
 
             List<String> command = RifeCommand.build(
                     runtime.getExecutable().getAbsolutePath(),
@@ -203,9 +242,14 @@ public final class RifeEngine {
                         + ", got " + frameFiles.size());
             }
 
-            progress(listener, 72, "H.264 编码 MP4");
+            List<File> encodedFrames = new ArrayList<>(plan.getFrames());
+            for (int index : FrameSequence.indices(frameCount, pingPong)) {
+                encodedFrames.add(frameFiles.get(index));
+            }
+
+            progress(listener, 72, pingPong ? "往返循环 · H.264 编码 MP4" : "H.264 编码 MP4");
             File mp4 = new File(jobDir, "local-video.mp4");
-            Mp4Encoder.encode(frameFiles, mp4, plan.getWidth(), plan.getHeight(), plan.getFps(),
+            Mp4Encoder.encode(encodedFrames, mp4, plan.getWidth(), plan.getHeight(), plan.getFps(),
                     (encoded, total) -> progress(listener,
                             72 + encoded * 20 / Math.max(1, total),
                             "MP4 编码 " + encoded + "/" + total));
@@ -217,7 +261,8 @@ public final class RifeEngine {
             progress(listener, 100, "完成");
             return new Result(
                     uri, plan, SystemClock.elapsedRealtime() - started, preprocessingMs,
-                    singleImageMode, motionPreset, depthPreset, backendLabel);
+                    singleImageMode, motionPreset, depthPreset, backendLabel,
+                    strength, pingPong, depth == null ? 2 : 5);
         } finally {
             deleteRecursively(jobDir);
         }
