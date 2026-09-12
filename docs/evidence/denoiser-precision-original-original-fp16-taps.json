@@ -1,0 +1,173 @@
+[
+  {
+    "name": "tap_x_embedder",
+    "dtype": 10,
+    "shape": [
+      6,
+      920,
+      1152
+    ]
+  },
+  {
+    "name": "tap_t_block",
+    "dtype": 10,
+    "shape": [
+      2,
+      2760,
+      6912
+    ]
+  },
+  {
+    "name": "tap_flow_block",
+    "dtype": 10,
+    "shape": [
+      2,
+      2760,
+      6912
+    ]
+  },
+  {
+    "name": "tap_block_0",
+    "dtype": 10,
+    "shape": [
+      2,
+      2760,
+      1152
+    ]
+  },
+  {
+    "name": "tap_block_1",
+    "dtype": 10,
+    "shape": [
+      2,
+      2760,
+      1152
+    ]
+  },
+  {
+    "name": "tap_block_2",
+    "dtype": 10,
+    "shape": [
+      2,
+      2760,
+      1152
+    ]
+  },
+  {
+    "name": "tap_block_3",
+    "dtype": 10,
+    "shape": [
+      2,
+      2760,
+      1152
+    ]
+  },
+  {
+    "name": "tap_block_4",
+    "dtype": 10,
+    "shape": [
+      2,
+      2760,
+      1152
+    ]
+  },
+  {
+    "name": "tap_block_5",
+    "dtype": 10,
+    "shape": [
+      2,
+      2760,
+      1152
+    ]
+  },
+  {
+    "name": "tap_block_6",
+    "dtype": 10,
+    "shape": [
+      2,
+      2760,
+      1152
+    ]
+  },
+  {
+    "name": "tap_block_7",
+    "dtype": 10,
+    "shape": [
+      2,
+      2760,
+      1152
+    ]
+  },
+  {
+    "name": "tap_block_8",
+    "dtype": 10,
+    "shape": [
+      2,
+      2760,
+      1152
+    ]
+  },
+  {
+    "name": "tap_block_9",
+    "dtype": 10,
+    "shape": [
+      2,
+      2760,
+      1152
+    ]
+  },
+  {
+    "name": "tap_block_10",
+    "dtype": 10,
+    "shape": [
+      2,
+      2760,
+      1152
+    ]
+  },
+  {
+    "name": "tap_block_11",
+    "dtype": 10,
+    "shape": [
+      2,
+      2760,
+      1152
+    ]
+  },
+  {
+    "name": "tap_block_12",
+    "dtype": 10,
+    "shape": [
+      2,
+      2760,
+      1152
+    ]
+  },
+  {
+    "name": "tap_block_13",
+    "dtype": 10,
+    "shape": [
+      2,
+      2760,
+      1152
+    ]
+  },
+  {
+    "name": "tap_block_14",
+    "dtype": 10,
+    "shape": [
+      2,
+      2760,
+      1152
+    ]
+  },
+  {
+    "name": "tap_block_15",
+    "dtype": 10,
+    "shape": [
+      2,
+      2760,
+      1152
+    ]
+  }
+]

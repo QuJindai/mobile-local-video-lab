@@ -51,7 +51,8 @@ jobs:
         with:
           github-token: ${{ github.token }}
           run-id: '34691139577'
-          name: mobilei2v-denoiser-UNQUALIFIED-precision-fixtures
+          artifact-ids: '10297535932'
+          merge-multiple: true
           path: previous-precision
       - name: Restore original baseline without rewriting its reports
         run: |

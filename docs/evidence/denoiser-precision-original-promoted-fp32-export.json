@@ -1,0 +1,25 @@
+{
+  "format": "mobilei2v-precision-diagnostic-v1",
+  "phase": "export",
+  "profile": "promoted-fp32",
+  "source_commit": "8d0a253c766b05a43ba408baf5e8f800a36be8b4",
+  "execution": "host-cpu-diagnostic",
+  "android_gpu_pack_ready": false,
+  "denoiser_qualification_passed": false,
+  "full_pipeline_qualified": false,
+  "script": {
+    "bytes": 16433,
+    "sha256": "9f8a1e6a0a5657742cf6dee84e187af2332f6dae8e6c2cf8e5809cb70e98bed3"
+  },
+  "checkpoint_sha256": "bc6a545302b342b87d83a4d78e9b74d47ca59fbf908fd8e13d9ecedbe1a37f2d",
+  "loaded_parameters": 267218048,
+  "generated_buffers_not_loaded": [
+    "pos_embed"
+  ],
+  "weight_provenance": "checkpoint -> float16 -> exact float32 expansion",
+  "arithmetic_profile": "promoted-fp32",
+  "torch_version": "2.4.0+cpu",
+  "onnx_version": "1.17.0",
+  "exact_shared_input_expansion": true,
+  "error": "RuntimeError: expected scalar type Float but found Half"
+}

@@ -1,0 +1,81 @@
+{
+  "format": "mobilei2v-precision-diagnostic-v1",
+  "phase": "export",
+  "profile": "original-fp16",
+  "source_commit": "8d0a253c766b05a43ba408baf5e8f800a36be8b4",
+  "execution": "host-cpu-diagnostic",
+  "android_gpu_pack_ready": false,
+  "denoiser_qualification_passed": false,
+  "full_pipeline_qualified": false,
+  "script": {
+    "bytes": 16433,
+    "sha256": "9f8a1e6a0a5657742cf6dee84e187af2332f6dae8e6c2cf8e5809cb70e98bed3"
+  },
+  "checkpoint_sha256": "bc6a545302b342b87d83a4d78e9b74d47ca59fbf908fd8e13d9ecedbe1a37f2d",
+  "loaded_parameters": 267218048,
+  "generated_buffers_not_loaded": [
+    "pos_embed"
+  ],
+  "weight_provenance": "checkpoint -> float16",
+  "arithmetic_profile": "original-fp16",
+  "torch_version": "2.4.0+cpu",
+  "onnx_version": "1.17.0",
+  "native_forward_seconds": 612.035245815,
+  "export_completed": true,
+  "onnx_contract": {
+    "latent": {
+      "dtype": "float16",
+      "shape": [
+        2,
+        128,
+        3,
+        23,
+        40
+      ]
+    },
+    "timestep": {
+      "dtype": "float16",
+      "shape": [
+        2
+      ]
+    },
+    "cond_mask": {
+      "dtype": "float32",
+      "shape": [
+        1,
+        2760
+      ]
+    },
+    "flow_score": {
+      "dtype": "float16",
+      "shape": [
+        2
+      ]
+    },
+    "output": {
+      "dtype": "float16",
+      "shape": [
+        2,
+        128,
+        3,
+        23,
+        40
+      ]
+    }
+  },
+  "export_observation": "module outputs exposed then pruned",
+  "artifacts": {
+    "denoiser.onnx": {
+      "bytes": 530905936,
+      "sha256": "c92ec1462225c69e763c4ba7138cacfffa67e0dae8561e9a3ad6a91783cd44bd"
+    },
+    "fixtures.npz": {
+      "bytes": 371667724,
+      "sha256": "565203266bcee836ca314c654424e41e08b8b7cd7878d6993a530eb96800960b"
+    },
+    "taps.json": {
+      "bytes": 2028,
+      "sha256": "11cee02840caa72d3f375c6b5466fb6a21de0be77454c2774cd784666bbd96e0"
+    }
+  }
+}

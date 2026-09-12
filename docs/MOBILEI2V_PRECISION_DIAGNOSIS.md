@@ -22,3 +22,30 @@ MNN 转换、实际 Adreno 执行和完整视频效果仍需各自验证。
 参考不作修改。14 个 LiteLA 的 RoPE 表保持原来的半精度频率与三角函数
 结果，再精确扩展，避免同时改变位置常量。两个密集注意力原有 FP32 RoPE
 保持原样。上述适配不代表原始 FP16 精度门槛已经通过。
+
+复核同时确认：增加中间输出只用于观察，不能强迫后续计算使用重新舍入的
+张量。另设原始 `t2i_modulate` 表达式的微型对照，将单个 ORT 图与逐个
+算子、显式 FP16 边界相比较。这个实验若显示差异，只证明舍入机制存在，
+不能单独归因整个去噪网络的误差。
+
+候选代码复核未发现阻断项，6 项针对性检查通过。后续执行复用原始实验
+的只读基准，校验原导出脚本、上游源码、权重及每个文件的身份；原始
+报告不重写，候选方案不能把旧失败报告改成成功。
+
+## 原始参考实测结果
+
+[运行 34691139577](https://github.com/QuJindai/mobile-local-video-lab/actions/runs/34691139577)
+对应源码 `eccdf2744ffaf02a19a8d9c70d88aa51016cfc21`。原始 FP16 的完整
+前向耗时 612.04 秒，导出和两种 ORT 图均实际执行完成。706,560 个最终
+输出值中 78 个超出原有容差，最大绝对误差 0.013671875，RMSE 0.0017619934。
+增加观察点前后的最终输出完全相同。在所观察的节点中，`block_2` 首次
+超过该容差；这定位了进一步检查的范围，不等于已确定其中某个算子的责任。
+
+该运行随后在未适配的 FP32 注意力处报 Float/Half 类型冲突，与复核发现
+一致。原始参考阶段的结果有效并保留；整次运行的结论仍为失败。
+
+- [原始比较报告](evidence/denoiser-precision-original-original-fp16-compare.json)
+- [原始导出证据](evidence/denoiser-precision-original-original-fp16-export.json)
+- [未适配 FP32 失败报告](evidence/denoiser-precision-original-promoted-fp32-export.json)
+- 原始图与确切输入 artifact：`10297535932`，699,175,066 字节；ZIP SHA-256
+  `acb8aba107c488a035de54c6c4f54e72b6d652065f8778ee019c097df02d65a7`。
