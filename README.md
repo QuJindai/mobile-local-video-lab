@@ -2,6 +2,30 @@
 
 Android/Snapdragon experiments for fully offline neural video generation.
 
+## V0.7 APK candidate
+
+The `feat/v07-mobilei2v-gpu` branch builds version `0.7.0` (versionCode `7`),
+retaining the V0.2+ development signing identity and application ID for in-place
+updates. RIFE Motion and Depth 3D remain included. MobileI2V now has a Java/JNI
+generation path targeting MNN OpenCL, but APK build success is **not** evidence
+of successful MobileI2V inference on a handset.
+
+An independently exported, parity-validated v2 GPU `.mlvpkg` is still required.
+This repository currently contains the pack builder, **not** a completed model
+exporter or a published, validated GPU pack. Downloading `hybrid_371.pth` alone
+does not make that checkpoint Android-executable. The UI keeps MobileI2V
+unavailable without a compatible pack and runtime probe; it never substitutes
+RIFE for MobileI2V.
+
+The APK gate distinguishes the generation button from the fixed-17-frame
+selector. Its regression tests execute the real workflow source gate and check
+both legitimate fixed-frame controls and deliberately broken generation paths.
+These are source/packaging gates, not device inference benchmarks.
+
+See [V0.7 handset acceptance](docs/V0.7_S24U_GPU_ACCEPTANCE.md) for the installation
+workflow and outstanding model/device acceptance. The V0.5 details below are
+the retained baseline, not the current release acceptance status.
+
 ## V0.5 milestone
 
 V0.3 is the S24U-validated RIFE baseline. V0.5 expands it into a **three-backend local-video workbench** and adds a second genuinely executable local model path before exposing the still-in-development semantic MobileI2V backend.

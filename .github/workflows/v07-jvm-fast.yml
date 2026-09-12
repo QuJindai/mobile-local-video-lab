@@ -30,6 +30,9 @@ jobs:
       - name: Test deterministic accelerated MobileI2V GPU packs
         run: python3 tools/mobilei2v/test_gpu_pack.py
 
+      - name: Test GPU generation gate regressions
+        run: python3 tools/mobilei2v/test_generation_contract.py
+
       - name: Verify Dream-derived GPU runtime source contract
         shell: bash
         run: |
