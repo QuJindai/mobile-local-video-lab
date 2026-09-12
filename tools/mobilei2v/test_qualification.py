@@ -1,8 +1,13 @@
 """Release evidence must reject wrong weights, missing parameters and bad tensors."""
 import hashlib
+from contextlib import redirect_stdout
+import io
+import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 import qualify_upstream as qualification
@@ -59,6 +64,44 @@ class QualificationTest(unittest.TestCase):
         self.assertTrue(result["passed"])
         with self.assertRaisesRegex(ValueError, "parity"):
             qualification.compare_outputs(expected, expected + 0.2)
+
+    def test_candidate_cannot_enlarge_reference_relative_tolerance(self):
+        reference = np.array([0], dtype=np.float16)
+        # This representable FP16 error exceeds 0.005 against reference zero,
+        # but was accepted when the candidate itself set the relative budget.
+        for value in (0.0050201416015625, -0.0050201416015625):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "parity"):
+                qualification.compare_outputs(reference, np.array([value], dtype=np.float16))
+
+    def test_nonfinite_prompt_forward_preserves_failure_report(self):
+        # Exercise failure reporting only; no model forward or GPU pass is mocked.
+        for invalid in (np.nan, np.inf, -np.inf):
+            with self.subTest(invalid=invalid), tempfile.TemporaryDirectory() as directory:
+                report_path = Path(directory) / "report.json"
+                def failed_run(args, report):
+                    qualification.record_prompt_perturbation(
+                        report, np.array([0.0]), np.array([invalid]))
+                argv = ["qualify_upstream", "--upstream", directory,
+                        "--checkpoint", str(Path(directory) / "weights.pth"),
+                        "--onnx", str(Path(directory) / "model.onnx"),
+                        "--report", str(report_path)]
+                with patch.object(sys, "argv", argv), patch.object(qualification, "run", failed_run), \
+                        redirect_stdout(io.StringIO()), self.assertRaisesRegex(ValueError, "finite"):
+                    qualification.main()
+                report = json.loads(report_path.read_text())
+                self.assertFalse(report["denoiser_qualification_passed"])
+                self.assertFalse(report["android_gpu_pack_ready"])
+                self.assertIn("finite", report["error"])
+                self.assertNotIn("prompt_perturbation_max_abs", report)
+
+    def test_prompt_invariance_is_measured_and_changed_output_is_rejected(self):
+        report = {}
+        reference = np.array([1.0, -2.0], dtype=np.float32)
+        qualification.record_prompt_perturbation(report, reference, reference.copy())
+        self.assertEqual(report["prompt_perturbation_max_abs"], 0.0)
+        with self.assertRaisesRegex(ValueError, "prompt affects"):
+            qualification.record_prompt_perturbation(report, reference, reference + 0.25)
+        self.assertEqual(report["prompt_perturbation_max_abs"], 0.25)
 
     def test_graph_contract_checks_input_types_shapes_and_output(self):
         valid = qualification.expected_denoiser_contract()

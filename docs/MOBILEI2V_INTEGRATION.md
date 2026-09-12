@@ -111,6 +111,13 @@ RMSE `0.0017619933933019638` under `atol=0.005`, `rtol=0.01`. The unmodified
 [failure report](evidence/mobilei2v-denoiser-failed.json) is retained. No qualified
 denoiser model was released and the tolerance has not been relaxed.
 
+Subsequent review corrected the denoiser comparator to anchor relative tolerance
+to the PyTorch reference, and made nonfinite prompt-perturbation failures retain
+a valid negative JSON report. Ten lightweight validation tests now pass,
+including a representable FP16 boundary case that was incorrectly accepted.
+The historical report above is unchanged; no new full-model parity pass is
+claimed from these helper tests.
+
 The actual ONNX ports are `latent`, `timestep`, `cond_mask`, `flow_score`, and
 `output`; only `cond_mask` is FP32, with the others FP16. The current Android
 expectation of `prompt`/`text_mask` is therefore incompatible with this export.

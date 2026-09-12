@@ -74,13 +74,26 @@ def compare_outputs(reference, actual, *, atol=0.005, rtol=0.01):
     if not np.isfinite(reference).all() or not np.isfinite(actual).all():
         raise ValueError("parity tensors must be finite")
     delta = actual - reference
-    result = {"passed": bool(np.allclose(reference, actual, atol=atol, rtol=rtol)),
+    result = {"passed": bool(np.allclose(actual, reference, atol=atol, rtol=rtol)),
               "max_absolute_error": float(np.max(np.abs(delta))),
               "rmse": float(np.sqrt(np.mean(delta * delta))),
               "atol": atol, "rtol": rtol}
     if not result["passed"]:
         raise ValueError("ONNX/PyTorch parity failed: " + json.dumps(result))
     return result
+
+
+def record_prompt_perturbation(report, reference, changed_prompt):
+    if reference.shape != changed_prompt.shape or not reference.size:
+        raise ValueError("prompt perturbation output has wrong shape")
+    if not np.isfinite(reference).all() or not np.isfinite(changed_prompt).all():
+        raise ValueError("prompt perturbation output must be finite")
+    maximum = float(np.max(np.abs(reference.astype(np.float64) - changed_prompt.astype(np.float64))))
+    if not np.isfinite(maximum):
+        raise ValueError("prompt perturbation difference must be finite")
+    report["prompt_perturbation_max_abs"] = maximum
+    if not np.array_equal(reference, changed_prompt):
+        raise ValueError("prompt affects this checkpoint; the image-only export contract is invalid")
 
 
 def expected_denoiser_contract():
@@ -211,9 +224,7 @@ def run(args, report):
         # Only a measured invariance is reported; no prompt support is invented.
         wrapper.unused_prompt.normal_()
         changed_prompt = wrapper(*inputs).float().cpu().numpy()
-        report["prompt_perturbation_max_abs"] = float(np.max(np.abs(reference - changed_prompt)))
-        if not np.array_equal(reference, changed_prompt):
-            raise ValueError("prompt affects this checkpoint; the image-only export contract is invalid")
+        record_prompt_perturbation(report, reference, changed_prompt)
         wrapper.unused_prompt.zero_()
         del changed_prompt
         args.report.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
