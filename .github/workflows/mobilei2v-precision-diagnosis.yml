@@ -1,0 +1,79 @@
+name: MobileI2V Denoiser Precision Diagnosis
+
+on:
+  push:
+    branches: [feat/mobilei2v-denoiser-precision]
+    paths:
+      - 'tools/mobilei2v/diagnose_precision.py'
+      - 'tools/mobilei2v/test_precision_diagnosis.py'
+      - '.github/workflows/mobilei2v-precision-diagnosis.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobilei2v-precision-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  controlled-comparison:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      DISABLE_XFORMERS: '1'
+      MMCV_WITH_OPS: '0'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pinned CPU diagnostic dependencies
+        run: |
+          python -m pip install --no-cache-dir setuptools==75.8.0 wheel==0.45.1
+          python -m pip install --no-cache-dir torch==2.4.0 torchvision==0.19.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir --no-build-isolation -r tools/mobilei2v/qualification-requirements.txt
+      - name: Verify precision evidence checks
+        run: |
+          python tools/mobilei2v/test_qualification.py
+          python tools/mobilei2v/test_precision_diagnosis.py
+      - name: Fetch pinned original source and checkpoint
+        run: |
+          git clone --filter=blob:none --no-checkout https://github.com/hustvl/MobileI2V.git "$RUNNER_TEMP/MobileI2V"
+          git -C "$RUNNER_TEMP/MobileI2V" checkout --detach 8d0a253c766b05a43ba408baf5e8f800a36be8b4
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/hybrid_371.pth" 'https://huggingface.co/hustvl/MobileI2V/resolve/290b2d0dfa93c65388b93e3f7591d7328b335e65/hybrid_371.pth'
+          mkdir -p precision
+          git rev-parse HEAD > precision/build-source.txt
+      - name: Export original FP16 model and exact layer references
+        run: |
+          python -u tools/mobilei2v/diagnose_precision.py --phase export --profile original-fp16 \
+            --output-root precision --upstream "$RUNNER_TEMP/MobileI2V" --checkpoint "$RUNNER_TEMP/hybrid_371.pth"
+      - name: Measure original and observed FP16 graphs without weakening tolerance
+        run: |
+          python -u tools/mobilei2v/diagnose_precision.py --phase compare --profile original-fp16 --output-root precision
+      - name: Export exact FP16 weights and inputs expanded to FP32
+        run: |
+          python -u tools/mobilei2v/diagnose_precision.py --phase export --profile promoted-fp32 \
+            --output-root precision --upstream "$RUNNER_TEMP/MobileI2V" --checkpoint "$RUNNER_TEMP/hybrid_371.pth"
+      - name: Measure FP32 export parity and original FP16 reference drift separately
+        run: |
+          python -u tools/mobilei2v/diagnose_precision.py --phase compare --profile promoted-fp32 --output-root precision
+      - name: Upload reports including numerical failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobilei2v-denoiser-precision-reports
+          path: |
+            precision/**/*.json
+            precision/build-source.txt
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Preserve exact unqualified graphs and fixtures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobilei2v-denoiser-UNQUALIFIED-precision-fixtures
+          path: precision/
+          if-no-files-found: warn
+          compression-level: 1
+          retention-days: 3
