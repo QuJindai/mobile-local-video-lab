@@ -35,6 +35,15 @@ def require_execution_device(requested, cuda_available):
     return requested
 
 
+def select_onnx_providers(requested, available):
+    if requested not in ("cpu", "cuda"):
+        raise ValueError("unknown ONNX qualification provider")
+    required = "CUDAExecutionProvider" if requested == "cuda" else "CPUExecutionProvider"
+    if required not in available:
+        raise RuntimeError(f"requested ONNX provider is unavailable: {required}")
+    return [required, "CPUExecutionProvider"] if requested == "cuda" else [required]
+
+
 def verify_checkpoint(path: Path, expected_sha=CHECKPOINT_SHA256,
                       expected_bytes=CHECKPOINT_BYTES):
     if path.stat().st_size != expected_bytes:
@@ -134,6 +143,7 @@ def run(args, report):
 
     root = args.upstream.resolve()
     device = require_execution_device(args.device, torch.cuda.is_available())
+    providers = select_onnx_providers(args.onnx_provider, ort.get_available_providers())
     report["execution"] = f"host-{device}-diagnostic"
     report["device"] = torch.cuda.get_device_name(0) if device == "cuda" else "cpu"
     verify_source(root)
@@ -241,9 +251,26 @@ def run(args, report):
     options.intra_op_num_threads = args.threads
     options.inter_op_num_threads = 1
     options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_BASIC
+    if args.onnx_provider == "cuda":
+        options.enable_profiling = True
+        options.profile_file_prefix = str(args.onnx.parent / "ort-placement")
     print("Comparing ONNX Runtime with PyTorch", flush=True)
-    session = ort.InferenceSession(str(args.onnx), sess_options=options, providers=["CPUExecutionProvider"])
+    session = ort.InferenceSession(str(args.onnx), sess_options=options, providers=providers)
+    report["onnx_configured_providers"] = session.get_providers()
+    if providers[0] not in session.get_providers():
+        raise RuntimeError(f"requested ONNX provider failed to initialize: {providers[0]}")
     actual = session.run(["output"], arrays)[0]
+    if args.onnx_provider == "cuda":
+        profile_path = Path(session.end_profiling())
+        counts = {}
+        for event in json.loads(profile_path.read_text()):
+            provider = event.get("args", {}).get("provider")
+            if provider:
+                counts[provider] = counts.get(provider, 0) + 1
+        report["onnx_executed_node_provider_counts"] = counts
+        report["onnx_placement_profile"] = profile_path.name
+        if not counts.get("CUDAExecutionProvider"):
+            raise RuntimeError("ONNX profiling recorded no CUDA execution")
     report["onnx_parity"] = compare_outputs(reference, actual)
     report["denoiser_qualification_passed"] = True
 
@@ -257,11 +284,14 @@ def main():
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--device", choices=("cpu", "cuda"), default="cpu",
                         help="reference/export device; CUDA is a host diagnostic, never an Adreno claim")
+    parser.add_argument("--onnx-provider", choices=("cpu", "cuda"), default="cpu",
+                        help="CUDA requires onnxruntime-gpu; actual node provider counts are recorded")
     args = parser.parse_args()
     if not 1 <= args.threads <= 16:
         parser.error("threads must be between 1 and 16")
     report = {"format": "mobilei2v-upstream-qualification-v1", "source_commit": SOURCE_COMMIT,
               "execution": f"host-{args.device}-diagnostic", "requested_reference_device": args.device,
+              "requested_onnx_provider": args.onnx_provider,
               "denoiser_qualification_passed": False,
               "android_gpu_pack_ready": False,
               "remaining": ["VAE artifact provenance and encode/decode parity", "MNN conversion parity",

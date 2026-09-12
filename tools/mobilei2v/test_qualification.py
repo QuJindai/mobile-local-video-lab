@@ -17,6 +17,14 @@ class QualificationTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             qualification.require_execution_device("unknown", True)
 
+    def test_onnx_cuda_request_requires_cuda_provider(self):
+        self.assertEqual(qualification.select_onnx_providers("cpu", ["CPUExecutionProvider"]),
+                         ["CPUExecutionProvider"])
+        self.assertEqual(qualification.select_onnx_providers("cuda", ["CPUExecutionProvider", "CUDAExecutionProvider"]),
+                         ["CUDAExecutionProvider", "CPUExecutionProvider"])
+        with self.assertRaisesRegex(RuntimeError, "CUDAExecutionProvider"):
+            qualification.select_onnx_providers("cuda", ["CPUExecutionProvider"])
+
     def test_checks_bytes_and_hash_before_loading_checkpoint(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "weights.pth"
