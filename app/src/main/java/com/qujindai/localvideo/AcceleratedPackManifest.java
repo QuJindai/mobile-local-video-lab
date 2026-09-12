@@ -23,6 +23,7 @@ public final class AcceleratedPackManifest {
     public static final String MOBILE_BACKEND = "mobilei2v";
     public static final String EXECUTION_MNN_OPENCL = "mnn-opencl";
     public static final String EXECUTION_QNN_HTP = "qnn-htp";
+    public static final String IO_CONTRACT = "mobilei2v-ltx-explicit-noise-v1";
 
     public static final String SOURCE_REPO = "hustvl/MobileI2V";
     public static final String SOURCE_COMMIT = "8d0a253c766b05a43ba408baf5e8f800a36be8b4";
@@ -42,8 +43,7 @@ public final class AcceleratedPackManifest {
             "denoiser.mnn",
             "vae_encoder.mnn",
             "vae_decoder.mnn",
-            "empty_prompt.f16",
-            "empty_prompt_mask.bin"
+            "runtime.properties"
     };
 
     public final String id;
@@ -100,6 +100,10 @@ public final class AcceleratedPackManifest {
         properties.load(input);
 
         requireEquals(properties, "format", FORMAT);
+        if (!IO_CONTRACT.equals(properties.getProperty("io.contract"))) {
+            throw new IllegalArgumentException("模型包接口已过时；需要四输入主模型和显式 VAE 噪声接口 (io.contract="
+                    + IO_CONTRACT + ")");
+        }
         String id = token(required(properties, "id"), "id");
         String backend = token(required(properties, "backend"), "backend");
         String version = token(required(properties, "version"), "version");
@@ -163,8 +167,7 @@ public final class AcceleratedPackManifest {
 
     public boolean isMobileI2VGpuRunnable() {
         if (!MOBILE_BACKEND.equalsIgnoreCase(backend)) return false;
-        return EXECUTION_MNN_OPENCL.equalsIgnoreCase(execution)
-                || EXECUTION_QNN_HTP.equalsIgnoreCase(execution);
+        return EXECUTION_MNN_OPENCL.equalsIgnoreCase(execution);
     }
 
     public String expectedSha256(String path) {

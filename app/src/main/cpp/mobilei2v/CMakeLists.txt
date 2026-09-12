@@ -42,7 +42,7 @@ target_include_directories(mobilei2v_gpu PRIVATE
 target_compile_options(mobilei2v_gpu PRIVATE
     -O3
     -fvisibility=hidden
-    -fno-exceptions
+    -fexceptions
 )
 
 target_link_options(mobilei2v_gpu PRIVATE

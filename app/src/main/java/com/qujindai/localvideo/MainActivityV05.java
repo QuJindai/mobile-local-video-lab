@@ -34,10 +34,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * V0.7 handset workbench.
+ * V0.7.1 handset workbench.
  *
  * RIFE is the validated baseline, Depth 3D is a genuine second local model path,
- * and MobileI2V remains blocked until its actual Android execution loop exists.
+ * and MobileI2V remains blocked until a compatible model pack passes its gates.
  */
 public final class MainActivityV05 extends Activity {
     private static final int PICK_PRIMARY = 100;
@@ -148,7 +148,7 @@ public final class MainActivityV05 extends Activity {
         TextView title = text("Local Video Lab", 25, true);
         titleRow.addView(title, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        TextView badge = text("V0.7", 12, true);
+        TextView badge = text("V0.7.1", 12, true);
         badge.setTextColor(Color.WHITE);
         badge.setGravity(Gravity.CENTER);
         badge.setBackground(rounded(COLOR_ACCENT, 20));
@@ -201,7 +201,7 @@ public final class MainActivityV05 extends Activity {
         root.addView(metricsView);
 
         diagnosticsButton = textAction("导出诊断信息");
-        diagnosticsButton.setVisibility(View.GONE);
+        diagnosticsButton.setVisibility(View.VISIBLE);
         diagnosticsButton.setOnClickListener(v -> shareDiagnostics());
         root.addView(diagnosticsButton);
         return scroll;
@@ -473,7 +473,7 @@ public final class MainActivityV05 extends Activity {
                     applyUiState();
                 });
             } catch (Throwable error) {
-                String diag = "Local Video Lab V0.7 · MobileI2V checkpoint download\n"
+                String diag = "Local Video Lab V0.7.1 · MobileI2V checkpoint download\n"
                         + source.label + "\n" + error.getClass().getName() + "\n" + safeMessage(error);
                 runOnUiThread(() -> {
                     checkpointDownloading = false;
@@ -548,7 +548,7 @@ public final class MainActivityV05 extends Activity {
             secondaryLabel.setText("第二张：已选择 · RIFE 双图插值");
             statusView.setText("双图插值输入已就绪。 ");
         }
-        diagnosticsButton.setVisibility(View.GONE);
+        diagnosticsButton.setVisibility(View.VISIBLE);
         applyUiState();
     }
 
@@ -582,7 +582,7 @@ public final class MainActivityV05 extends Activity {
                     applyUiState();
                 });
             } catch (Throwable error) {
-                String diag = "Local Video Lab V0.7 · model pack install\n"
+                String diag = "Local Video Lab V0.7.1 · model pack install\n"
                         + error.getClass().getName() + "\n" + safeMessage(error);
                 runOnUiThread(() -> {
                     modelInstalling = false;
@@ -636,7 +636,7 @@ public final class MainActivityV05 extends Activity {
         phase = UiStatePolicy.Phase.GENERATING;
         progressBar.setProgress(0);
         statusView.setText("0% · 正在准备 " + backendDisplayName(backend));
-        diagnosticsButton.setVisibility(View.GONE);
+        diagnosticsButton.setVisibility(View.VISIBLE);
         applyUiState();
         final int thermalBefore = thermalStatus();
 
@@ -657,7 +657,7 @@ public final class MainActivityV05 extends Activity {
                     lastVideoUri = mobileResult.uri;
                     historyStore.record(record);
                     lastMobileMicroscope = mobileResult.microscope;
-                    lastDiagnostics = mobileResult.microscope.format();
+                    lastDiagnostics = mobileResult.microscope.format() + "\nJava Gaussian seed=" + mobileResult.seed;
                     runOnUiThread(() -> {
                         phase = UiStatePolicy.Phase.SUCCESS;
                         progressBar.setProgress(100);
@@ -769,7 +769,7 @@ public final class MainActivityV05 extends Activity {
             return new BackendRouter.Decision(backend, probe.openClReady,
                     probe.openClReady ? BackendRouter.Blocker.NONE : BackendRouter.Blocker.RUNTIME_PENDING,
                     probe.openClReady
-                            ? "MobileI2V · Adreno GPU · MNN OpenCL 已就绪"
+                            ? "MobileI2V 接口检查通过 · 可发起设备试跑，效果待验收"
                             : probe.message);
         }
         boolean ortReady = onnxStatus != null && onnxStatus.jniLoaded;
@@ -789,7 +789,7 @@ public final class MainActivityV05 extends Activity {
             mobilePackView.setText(
                     "MobileI2V 模型包：未安装\n"
                             + "固定上游：hustvl/MobileI2V · 0.27B · 17帧\n"
-                            + "权重/导出产物采用外部 .mlvpkg，不把约 1GB checkpoint 塞进 APK。 ");
+                            + "本测试版尚未提供完整可用模型包，MobileI2V 生成功能暂不可测试。");
         } else {
             ModelPackManifest m = mobilePack.manifest;
             mobilePackView.setText(String.format(Locale.US,
@@ -808,7 +808,7 @@ public final class MainActivityV05 extends Activity {
                 checkpointDownloadView.setText(
                         "上游原版权重：已下载 · SHA-256 PASS · "
                                 + formatDownloadBytes(checkpoint.expectedBytes)
-                                + "\n可离线保留；原始 .pth 仍需 Android 导出 runtime 才能进入生成门槛。");
+                                + "\n原始 .pth 不能直接生成视频，仍需转换并验证完整模型包。");
             } else if (partial > 0L) {
                 checkpointDownloadView.setText(
                         "上游原版权重：断点已保存 · " + formatDownloadBytes(partial)
@@ -831,7 +831,9 @@ public final class MainActivityV05 extends Activity {
                 + (DepthRuntimeBundle.isPackaged(this) ? "PACKAGED" : "MISSING")
                 + "\n" + runtime
                 + "\nMobileI2V GPU: "
-                + (mobileGpuProbe == null ? "PENDING" : mobileGpuProbe.message));
+                + (mobileGpuProbe == null ? (mobilePack == null ? "未加载模型包" : "探测中") : mobileGpuProbe.message)
+                + "\nMobileI2V native: "
+                + (MobileI2VGpuNative.isNativeLoaded() ? "LOADED" : MobileI2VGpuNative.nativeError()));
     }
 
     private void applyUiState() {
@@ -1025,12 +1027,37 @@ public final class MainActivityV05 extends Activity {
     }
 
     private void shareDiagnostics() {
-        if (lastDiagnostics == null || lastDiagnostics.isEmpty()) return;
         Intent intent = new Intent(Intent.ACTION_SEND);
         intent.setType("text/plain");
-        intent.putExtra(Intent.EXTRA_SUBJECT, "Local Video Lab V0.7 diagnostics");
-        intent.putExtra(Intent.EXTRA_TEXT, lastDiagnostics);
-        startActivity(Intent.createChooser(intent, "导出诊断信息"));
+        intent.putExtra(Intent.EXTRA_SUBJECT, "Local Video Lab V0.7.1 diagnostics");
+        intent.putExtra(Intent.EXTRA_TEXT, handsetDiagnostics());
+        try {
+            startActivity(Intent.createChooser(intent, "导出诊断信息"));
+        } catch (RuntimeException error) {
+            statusView.setText("无法调用系统分享：" + safeMessage(error));
+        }
+    }
+
+    private String handsetDiagnostics() {
+        BackendRouter.Decision decision = currentBackendDecision();
+        return "Local Video Lab V0.7.1 · handset test\n"
+                + "package=com.qujindai.localvideo · versionCode=8\n"
+                + "设备=" + Build.MANUFACTURER + " " + Build.MODEL + "\n"
+                + "Android API=" + Build.VERSION.SDK_INT + "\n"
+                + (capabilities == null ? "设备能力未探测" : capabilities.summary()) + "\n"
+                + "选择后端=" + selectedBackend() + "\n"
+                + "生成门槛=" + decision.ready + " · " + decision.message + "\n"
+                + "MobileI2V native=" + (MobileI2VGpuNative.isNativeLoaded()
+                        ? "LOADED (不代表模型或 GPU 已验证)" : MobileI2VGpuNative.nativeError()) + "\n"
+                + "MobileI2V 模型=" + (mobilePack == null ? "未安装兼容模型包"
+                        : mobilePack.manifest.id + " · " + mobilePack.manifest.version) + "\n"
+                + "MobileI2V 探测=" + (mobileGpuProbe == null ? "未完成" : mobileGpuProbe.message) + "\n"
+                + "MobileI2V 主模型精度和 Adreno 出片验收仍未完成\n"
+                + "Depth 模型=" + DepthRuntimeBundle.isPackaged(this) + "\n"
+                + (onnxStatus == null ? "ONNX 未探测" : onnxStatus.message) + "\n"
+                + "热状态=" + thermalName(thermalStatus()) + "\n\n"
+                + "最近一次任务：\n" + (lastDiagnostics == null || lastDiagnostics.isEmpty()
+                        ? "本次启动尚无生成或错误记录" : lastDiagnostics);
     }
 
     private String formatMetrics(RifeEngine.Result result, int thermalBefore, int thermalAfter) {
@@ -1046,7 +1073,7 @@ public final class MainActivityV05 extends Activity {
                 ? String.format(Locale.US, "\n估深预处理: %.2f s", result.preprocessingMs / 1000.0)
                 : "";
         return String.format(Locale.US,
-                "Local Video Lab V0.7\n"
+                "Local Video Lab V0.7.1\n"
                         + "后端: %s\n"
                         + "模式: %s\n"
                         + "输出: %dx%d · %d 帧 · %d FPS\n"
@@ -1066,7 +1093,7 @@ public final class MainActivityV05 extends Activity {
 
     private String formatError(Throwable error) {
         return String.format(Locale.US,
-                "Local Video Lab V0.7\n"
+                "Local Video Lab V0.7.1\n"
                         + "状态: 生成失败\n"
                         + "后端: %s\n"
                         + "异常: %s\n"

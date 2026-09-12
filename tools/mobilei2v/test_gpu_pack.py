@@ -13,8 +13,6 @@ FILES = {
     "denoiser.mnn": b"mobilei2v-denoiser\x00" * 17,
     "vae_encoder.mnn": b"mobilei2v-vae-encoder\x00" * 11,
     "vae_decoder.mnn": b"mobilei2v-vae-decoder\x00" * 13,
-    "empty_prompt.f16": b"\x00\x3c" * 96,
-    "empty_prompt_mask.bin": b"\x01" * 600,
 }
 
 
@@ -56,6 +54,12 @@ def test_manifest_pins_and_runtime_contract() -> None:
         assert props["format"] == "local-video-model-pack-v2"
         assert props["backend"] == "mobilei2v"
         assert props["execution"] == "mnn-opencl"
+        assert props["io.contract"] == "mobilei2v-ltx-explicit-noise-v1"
+        with zipfile.ZipFile(out) as zf:
+            runtime = zf.read("runtime.properties").decode("utf-8")
+            assert "model.text.conditioning=false" in runtime
+            assert "vae.posterior=explicit-noise" in runtime
+            assert "model.prompt." not in runtime
         assert props["source.repo"] == "hustvl/MobileI2V"
         assert props["source.commit"] == "8d0a253c766b05a43ba408baf5e8f800a36be8b4"
         assert props["checkpoint.sha256"] == "bc6a545302b342b87d83a4d78e9b74d47ca59fbf908fd8e13d9ecedbe1a37f2d"
@@ -116,6 +120,28 @@ def test_unsafe_manifest_file_is_rejected() -> None:
         raise AssertionError("unsafe manifest path was accepted")
 
 
+def test_obsolete_prompt_contract_is_rejected() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        src = tmp / "src"
+        populate(src)
+        out = build_pack(src, tmp / "good.mlvpkg", "0.7.1-test")
+        obsolete = tmp / "obsolete.mlvpkg"
+        with zipfile.ZipFile(out) as zf, zipfile.ZipFile(obsolete, "w") as dst:
+            for info in zf.infolist():
+                data = zf.read(info.filename)
+                if info.filename == "model-pack.properties":
+                    data = b"\n".join(line for line in data.split(b"\n")
+                                      if not line.startswith(b"io.contract="))
+                dst.writestr(info, data)
+        try:
+            verify_pack(obsolete)
+        except ValueError as exc:
+            assert "io.contract" in str(exc)
+        else:
+            raise AssertionError("obsolete prompt-based contract was accepted")
+
+
 def main() -> None:
     tests = [
         test_deterministic,
@@ -123,6 +149,7 @@ def main() -> None:
         test_missing_runtime_artifact_fails,
         test_tampered_artifact_fails,
         test_unsafe_manifest_file_is_rejected,
+        test_obsolete_prompt_contract_is_rejected,
     ]
     for test in tests:
         test()

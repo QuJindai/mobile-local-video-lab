@@ -24,7 +24,7 @@ SOURCES = (
 
 def workflow_gate():
     workflow = (ROOT / ".github/workflows/android-apk.yml").read_text(encoding="utf-8")
-    name = "      - name: Verify V0.7 MobileI2V full GPU generation contract\n"
+    name = "      - name: Verify MobileI2V generation wiring\n"
     step = workflow.split(name, 1)[1].split("\n      - name:", 1)[0]
     return textwrap.dedent(step.split("        run: |\n", 1)[1])
 

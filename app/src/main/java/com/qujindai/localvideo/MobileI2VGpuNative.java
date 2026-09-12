@@ -30,18 +30,19 @@ public final class MobileI2VGpuNative {
     public static Probe probe(InstalledModelPack pack){
         if(pack==null||!pack.isAcceleratedMobileI2V()) return new Probe(false,false,"加速 MobileI2V 模型包未安装");
         if(!NATIVE_LOADED) return new Probe(false,false,"GPU native runtime 加载失败 · "+NATIVE_ERROR);
-        for(String name:new String[]{"denoiser.mnn","vae_encoder.mnn","vae_decoder.mnn","empty_prompt.f16","empty_prompt_mask.bin"}){
+        for(String name:new String[]{"denoiser.mnn","vae_encoder.mnn","vae_decoder.mnn"}){
             if(!pack.artifact(name).isFile()) return new Probe(false,false,name+" 缺失");
         }
         try{
             String result=nativeProbe(pack.root.getAbsolutePath());
-            boolean ready=result!=null&&result.startsWith("MNN_OPENCL_READY:");
-            return new Probe(ready,ready&&result.contains("cache-enabled"),result==null?"native probe returned null":result);
+            boolean ready=result!=null&&result.startsWith("MNN_OPENCL_CONTRACT_VALID:");
+            return new Probe(ready,ready&&result.contains("cache-enabled"),result==null?"native probe returned null · "+lastNativeError():result);
         }catch(Throwable e){return new Probe(false,false,"MNN OpenCL 探测异常 · "+e.getClass().getSimpleName());}
     }
     public static Session load(InstalledModelPack pack){
-        Probe p=probe(pack); if(!p.openClReady) throw new IllegalStateException(p.message);
-        long h=nativeLoad(pack.root.getAbsolutePath()); if(h==0L) throw new IllegalStateException("MNN OpenCL MobileI2V session load failed");
+        if(pack==null||!pack.isAcceleratedMobileI2V()) throw new IllegalStateException("兼容的 MobileI2V 模型包未安装");
+        if(!NATIVE_LOADED) throw new IllegalStateException("GPU native runtime 加载失败 · "+NATIVE_ERROR);
+        long h=nativeLoad(pack.root.getAbsolutePath()); if(h==0L) throw nativeFailure("MNN OpenCL session load",0);
         return new Session(h);
     }
     public static final class Probe{
@@ -50,18 +51,26 @@ public final class MobileI2VGpuNative {
     }
     public static final class Session implements AutoCloseable{
         private long handle; Session(long h){handle=h;}
-        public synchronized void encode(float[] image,float[] guide){requireOpen();requireLength(image,ENCODER_INPUT_FLOATS,"imageNchw");requireLength(guide,GUIDE_LATENT_FLOATS,"guideLatent");int c=nativeEncode(handle,image,guide);if(c!=0)throw new IllegalStateException("GPU VAE encoder failed · code="+c);}
-        public synchronized void runDenoiser(float[] latent,float timestep,float flowScore,float[] output){requireOpen();requireLength(latent,LATENT_CFG_FLOATS,"latentCfg2");requireLength(output,LATENT_CFG_FLOATS,"outputCfg2");int c=nativeRunDenoiser(handle,latent,timestep,new float[]{flowScore,flowScore},output);if(c!=0)throw new IllegalStateException("GPU denoiser failed · code="+c);}
-        public synchronized void decode(float[] latent){requireOpen();requireLength(latent,SINGLE_LATENT_FLOATS,"latent");int c=nativeDecode(handle,latent);if(c!=0)throw new IllegalStateException("GPU VAE decoder failed · code="+c);}
-        public synchronized void copyDecodedFrameArgb(int frame,int[] argb){requireOpen();if(frame<0||frame>=OUTPUT_FRAMES)throw new IllegalArgumentException("invalid frame "+frame);if(argb==null||argb.length!=FRAME_ARGB_PIXELS)throw new IllegalArgumentException("argb must contain "+FRAME_ARGB_PIXELS+" pixels");int c=nativeCopyDecodedFrameArgb(handle,frame,argb);if(c!=0)throw new IllegalStateException("decoded frame copy failed · code="+c);}
+        public synchronized void encode(float[] image,float[] epsilon,float[] guide){requireOpen();requireLength(image,ENCODER_INPUT_FLOATS,"imageNchw");requireLength(epsilon,GUIDE_LATENT_FLOATS,"posteriorEpsilon");requireLength(guide,GUIDE_LATENT_FLOATS,"guideLatent");int c=nativeEncode(handle,image,epsilon,guide);if(c!=0)throw nativeFailure("GPU VAE encoder",c);}
+        public synchronized void runDenoiser(float[] latent,float timestep,float flowScore,float[] output){requireOpen();requireLength(latent,LATENT_CFG_FLOATS,"latentCfg2");requireLength(output,LATENT_CFG_FLOATS,"outputCfg2");int c=nativeRunDenoiser(handle,latent,timestep,new float[]{flowScore,flowScore},output);if(c!=0)throw nativeFailure("GPU denoiser",c);}
+        public synchronized void decode(float[] latent){requireOpen();requireLength(latent,SINGLE_LATENT_FLOATS,"latent");int c=nativeDecode(handle,latent);if(c!=0)throw nativeFailure("GPU VAE decoder",c);}
+        public synchronized void copyDecodedFrameArgb(int frame,int[] argb){requireOpen();if(frame<0||frame>=OUTPUT_FRAMES)throw new IllegalArgumentException("invalid frame "+frame);if(argb==null||argb.length!=FRAME_ARGB_PIXELS)throw new IllegalArgumentException("argb must contain "+FRAME_ARGB_PIXELS+" pixels");int c=nativeCopyDecodedFrameArgb(handle,frame,argb);if(c!=0)throw nativeFailure("decoded frame copy",c);}
         public synchronized void clearDecoded(){if(handle!=0L)nativeClearDecoded(handle);}
         private void requireOpen(){if(handle==0L)throw new IllegalStateException("GPU session already closed");}
         @Override public synchronized void close(){if(handle!=0L){nativeRelease(handle);handle=0L;}}
     }
     private static void requireLength(float[] v,int e,String n){if(v==null||v.length!=e)throw new IllegalArgumentException(n+" must contain "+e+" floats");}
+    private static String lastNativeError(){
+        try { String detail=nativeLastError(); return detail==null?"":detail; }
+        catch(Throwable ignored){return "native error unavailable";}
+    }
+    private static IllegalStateException nativeFailure(String stage,int code){
+        return new IllegalStateException(stage+" failed · code="+code+" · "+lastNativeError());
+    }
+    private static native String nativeLastError();
     private static native String nativeProbe(String modelDir);
     private static native long nativeLoad(String modelDir);
-    private static native int nativeEncode(long handle,float[] imageNchw,float[] guideLatent);
+    private static native int nativeEncode(long handle,float[] imageNchw,float[] posteriorEpsilon,float[] guideLatent);
     private static native int nativeRunDenoiser(long handle,float[] latentCfg2,float timestep,float[] flowScoreCfg2,float[] outputCfg2);
     private static native int nativeDecode(long handle,float[] latent);
     private static native int nativeCopyDecodedFrameArgb(long handle,int frame,int[] argb);

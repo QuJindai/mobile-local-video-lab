@@ -104,7 +104,7 @@ public final class MobileI2VMicroscope {
                         + "MNN: %s\n"
                         + "请求后端: %s\n"
                         + "实际后端: %s\n"
-                        + "OpenCL: %s · tuning cache: %s\n"
+                        + "OpenCL: %s · tuning cache hit: not measured\n"
                         + "VAE: %s\n"
                         + "生成契约: %dx%d · %d 帧 · %d steps\n"
                         + "耗时(ms): encode=%d · denoise=%d · decode=%d · mp4=%d\n"
@@ -116,7 +116,7 @@ public final class MobileI2VMicroscope {
                 empty(packId), empty(packVersion), shortSha(sourceCommit), shortSha(checkpointSha256),
                 shortSha(dreamCommit), shortSha(mnnCommit),
                 requestedBackend.name(), actualBackend.name(),
-                openClReady ? "READY" : "NO", tuningCacheHit ? "HIT" : "MISS",
+                openClReady ? "READY" : "NO",
                 empty(vaeImpl), width, height, frames, steps,
                 encodeMs, denoiseMs, decodeMs, mp4Ms,
                 javaHeapBeforeMb, javaHeapPeakMb,

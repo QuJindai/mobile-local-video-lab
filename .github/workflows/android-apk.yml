@@ -7,6 +7,7 @@ on:
   push:
     branches:
       - main
+      - feat/v071-handset-test
   workflow_dispatch:
 
 permissions:
@@ -35,6 +36,7 @@ jobs:
         run: |
           cd tools/mobilei2v
           python3 test_model_pack.py
+          python3 test_gpu_pack.py
 
       - name: Verify MobileI2V dual-source download contract
         shell: bash
@@ -64,7 +66,7 @@ jobs:
             exit 1
           fi
 
-      - name: Verify V0.7 MobileI2V full GPU generation contract
+      - name: Verify MobileI2V generation wiring
         shell: bash
         run: |
           set -euo pipefail
@@ -197,7 +199,7 @@ jobs:
       - name: Assemble debug APK
         run: gradle :app:assembleDebug --stacktrace
 
-      - name: Verify V0.7 APK runtime, models, launcher and signing
+      - name: Verify V0.7.1 APK runtime, models, launcher and signing
         shell: bash
         run: |
           set -euo pipefail
@@ -213,8 +215,8 @@ jobs:
             = '5d55b02762e1907589158af3e366bd61ddf648155852a07bbf5e3a074639fcf8'
 
           "$ANDROID_SDK_ROOT/build-tools/35.0.0/aapt" dump badging "$APK" | tee apk-badging.txt
-          grep "versionCode='7'" apk-badging.txt
-          grep "versionName='0.7.0'" apk-badging.txt
+          grep "versionCode='8'" apk-badging.txt
+          grep "versionName='0.7.1'" apk-badging.txt
           grep "launchable-activity: name='com.qujindai.localvideo.MainActivityV05'" apk-badging.txt
 
           "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee apk-signing.txt
@@ -244,16 +246,30 @@ jobs:
               raise SystemExit(f'APK 16KB ELF gate failed: {failures}')
           PY
           sha256sum "$APK" | tee apk-sha256.txt
+          python3 - <<'PY'
+          import os, pathlib
+          pathlib.Path('build-source.txt').write_text(os.environ['GITHUB_SHA'] + '\n')
+          PY
+
+      - name: Upload JVM test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v0.7.1-jvm-test-results
+          path: app/build/test-results/testDebugUnitTest/
+          if-no-files-found: warn
+          retention-days: 30
 
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: mobile-local-video-v0.7-mobilei2v-gpu-apk
+          name: mobile-local-video-v0.7.1-handset-test-apk
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             apk-sha256.txt
             apk-badging.txt
             apk-signing.txt
+            build-source.txt
             app/src/main/assets/runtime/runtime-manifest.txt
             tools/mobilei2v/upstream.lock.properties
           if-no-files-found: error

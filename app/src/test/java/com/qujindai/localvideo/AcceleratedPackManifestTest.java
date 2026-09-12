@@ -14,7 +14,6 @@ public class AcceleratedPackManifestTest {
     private static final String HASH_B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
     private static final String HASH_C = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
     private static final String HASH_D = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
-    private static final String HASH_E = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
 
     @Test
     public void v2GpuPackRequiresPinnedExecutionFields() throws Exception {
@@ -48,14 +47,27 @@ public class AcceleratedPackManifestTest {
     @Test(expected = IllegalArgumentException.class)
     public void missingRuntimeArtifactIsRejected() throws Exception {
         AcceleratedPackManifest.parse(stream(validManifest().replace(
-                "denoiser.mnn,vae_encoder.mnn,vae_decoder.mnn,empty_prompt.f16,empty_prompt_mask.bin",
-                "denoiser.mnn,vae_encoder.mnn,empty_prompt.f16,empty_prompt_mask.bin")));
+                "denoiser.mnn,vae_encoder.mnn,vae_decoder.mnn,runtime.properties",
+                "denoiser.mnn,vae_encoder.mnn,runtime.properties")));
     }
 
     @Test(expected = IllegalArgumentException.class)
     public void unsafeArtifactPathIsRejected() throws Exception {
         AcceleratedPackManifest.parse(stream(validManifest().replace(
                 "denoiser.mnn,", "../denoiser.mnn,")));
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void obsoletePromptContractIsRejected() throws Exception {
+        AcceleratedPackManifest.parse(stream(validManifest().replace(
+                "io.contract=mobilei2v-ltx-explicit-noise-v1\n", "")));
+    }
+
+    @Test
+    public void unimplementedQnnIsNotRunnable() throws Exception {
+        AcceleratedPackManifest manifest = AcceleratedPackManifest.parse(
+                stream(validManifest().replace("execution=mnn-opencl", "execution=qnn-htp")));
+        assertFalse(manifest.isMobileI2VGpuRunnable());
     }
 
     private static ByteArrayInputStream stream(String value) {
@@ -68,6 +80,7 @@ public class AcceleratedPackManifestTest {
                 + "backend=mobilei2v\n"
                 + "version=0.7\n"
                 + "execution=mnn-opencl\n"
+                + "io.contract=mobilei2v-ltx-explicit-noise-v1\n"
                 + "source.repo=hustvl/MobileI2V\n"
                 + "source.commit=8d0a253c766b05a43ba408baf5e8f800a36be8b4\n"
                 + "checkpoint.sha256=bc6a545302b342b87d83a4d78e9b74d47ca59fbf908fd8e13d9ecedbe1a37f2d\n"
@@ -77,11 +90,10 @@ public class AcceleratedPackManifestTest {
                 + "frames=17\n"
                 + "width=1280\n"
                 + "height=720\n"
-                + "files=denoiser.mnn,vae_encoder.mnn,vae_decoder.mnn,empty_prompt.f16,empty_prompt_mask.bin\n"
+                + "files=denoiser.mnn,vae_encoder.mnn,vae_decoder.mnn,runtime.properties\n"
                 + "sha256.denoiser.mnn=" + HASH_A + "\n"
                 + "sha256.vae_encoder.mnn=" + HASH_B + "\n"
                 + "sha256.vae_decoder.mnn=" + HASH_C + "\n"
-                + "sha256.empty_prompt.f16=" + HASH_D + "\n"
-                + "sha256.empty_prompt_mask.bin=" + HASH_E + "\n";
+                + "sha256.runtime.properties=" + HASH_D + "\n";
     }
 }

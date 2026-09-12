@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Build and verify deterministic MobileI2V accelerated Android model packs.
 
-This module never converts PyTorch weights. It only packages *already exported
-and parity-verified* MNN runtime artifacts. `export_mobilei2v_gpu.py` is
-responsible for producing those artifacts from the pinned upstream checkpoint.
+This module packages exported MNN files and verifies their integrity. Packaging
+is not numerical or device qualification; see docs/MOBILEI2V_INTEGRATION.md.
 """
 from __future__ import annotations
 
@@ -18,6 +17,7 @@ FORMAT = "local-video-model-pack-v2"
 PACK_ID = "mobilei2v-300m-gpu"
 BACKEND = "mobilei2v"
 EXECUTION = "mnn-opencl"
+IO_CONTRACT = "mobilei2v-ltx-explicit-noise-v1"
 SOURCE_REPO = "hustvl/MobileI2V"
 SOURCE_COMMIT = "8d0a253c766b05a43ba408baf5e8f800a36be8b4"
 CHECKPOINT_SHA256 = "bc6a545302b342b87d83a4d78e9b74d47ca59fbf908fd8e13d9ecedbe1a37f2d"
@@ -35,8 +35,6 @@ REQUIRED = (
     "denoiser.mnn",
     "vae_encoder.mnn",
     "vae_decoder.mnn",
-    "empty_prompt.f16",
-    "empty_prompt_mask.bin",
 )
 RUNTIME_PROPERTIES = "runtime.properties"
 MANIFEST = "model-pack.properties"
@@ -107,6 +105,7 @@ def _runtime_properties(version: str, vae_impl: str) -> bytes:
     text = (
         f"runtime.format=mobilei2v-android-runtime-v1\n"
         f"runtime.execution={EXECUTION}\n"
+        f"io.contract={IO_CONTRACT}\n"
         f"runtime.version={version}\n"
         f"model.frames={FRAMES}\n"
         f"model.width={WIDTH}\n"
@@ -116,8 +115,10 @@ def _runtime_properties(version: str, vae_impl: str) -> bytes:
         "model.latent.height=23\n"
         "model.latent.width=40\n"
         "model.cfg.batch=2\n"
-        "model.prompt.length=300\n"
-        "model.prompt.channels=896\n"
+        "model.text.conditioning=false\n"
+        "model.port.dtype=float32\n"
+        "vae.posterior=explicit-noise\n"
+        "vae.output.crop=top-720\n"
         "sampler=flow-euler\n"
         "sampler.flow.shift=3.0\n"
         f"vae.impl={vae_impl}\n"
@@ -161,6 +162,7 @@ def _render_manifest(
         f"backend={BACKEND}",
         f"version={version}",
         f"execution={EXECUTION}",
+        f"io.contract={IO_CONTRACT}",
         f"source.repo={SOURCE_REPO}",
         f"source.commit={SOURCE_COMMIT}",
         f"checkpoint.sha256={CHECKPOINT_SHA256}",
@@ -244,6 +246,7 @@ def verify_pack(path: Path) -> dict[str, str]:
         _require(props, "format", FORMAT)
         _require(props, "backend", BACKEND)
         _require(props, "execution", EXECUTION)
+        _require(props, "io.contract", IO_CONTRACT)
         _require(props, "source.repo", SOURCE_REPO)
         _require(props, "source.commit", SOURCE_COMMIT)
         _require(props, "checkpoint.sha256", CHECKPOINT_SHA256)

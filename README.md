@@ -1,3 +1,5 @@
+> V0.7.1 手机测试版：[本机测试说明](docs/V0.7.1_HANDSET_TEST.md)。修复 Android 接口和诊断导出；MobileI2V 完整模型包及出片验收尚未完成。
+
 # Mobile Local Video Lab
 
 Android/Snapdragon experiments for fully offline neural video generation.

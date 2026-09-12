@@ -182,5 +182,7 @@ This qualifies the two VAE stages on the tested CPU fixtures with that setting.
 It does not establish Adreno correctness, mobile speed/memory suitability or
 generated-video quality. The next model blocker is denoiser precision and MNN
 conversion. Its GPU diagnostic is prepared but did not start after the service
-returned HTTP 402. Android contract changes, actual Adreno execution and one
-integrated image-to-video acceptance must follow before a new MobileI2V APK.
+returned HTTP 402. The V0.7.1 handset test branch corrects Android contracts and delivers an APK
+for existing-backend regression and diagnostics. It is not a MobileI2V-ready
+release. Denoiser qualification, a complete compatible model pack, actual
+Adreno execution and integrated image-to-video acceptance remain outstanding.
