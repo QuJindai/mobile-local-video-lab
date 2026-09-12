@@ -23,6 +23,18 @@ class VAEQualificationTest(unittest.TestCase):
     def setUp(self):
         self.assertIsNotNone(qualification, "qualify_vae implementation is missing")
 
+    def test_negative_transpose_axes_preserve_torch_movedim_semantics(self):
+        # Actual Torch 2.4 export of Diffusers RMSNorm emitted this invalid
+        # ONNX permutation. PyTorch negative axes must become positive axes.
+        perm = qualification.canonical_transpose_perm([0, -1, 1, 2, 3])
+        self.assertEqual(perm, [0, 4, 1, 2, 3])
+        x = np.arange(2 * 3 * 4 * 5 * 6).reshape(2, 3, 4, 5, 6)
+        np.testing.assert_array_equal(x.transpose(perm), np.moveaxis(x, -1, 1))
+        self.assertEqual(qualification.canonical_transpose_perm([1, 0]), [1, 0])
+        for invalid in ([0, -6, 1, 2, 3], [0, 4, 1, 2, 4], [0, 5, 1, 2, 3]):
+            with self.subTest(perm=invalid), self.assertRaises(ValueError):
+                qualification.canonical_transpose_perm(invalid)
+
     def test_checkpoint_rejects_wrong_size_and_same_size_corruption(self):
         with tempfile.TemporaryDirectory(dir="/dev/shm") as directory:
             path = Path(directory) / "weights.safetensors"

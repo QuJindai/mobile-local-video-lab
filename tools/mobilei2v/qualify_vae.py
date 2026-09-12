@@ -53,6 +53,46 @@ RAW_SHAPE = (1, 3, 17, 736, 1280)
 VIDEO_SHAPE = (1, 3, 17, 720, 1280)
 
 
+def canonical_transpose_perm(perm):
+    rank = len(perm)
+    if any(axis < -rank or axis >= rank for axis in perm):
+        raise ValueError("Transpose axis is outside its tensor rank")
+    positive = [axis + rank if axis < 0 else axis for axis in perm]
+    if sorted(positive) != list(range(rank)):
+        raise ValueError("Transpose axes are not a permutation")
+    return positive
+
+
+def canonicalize_exported_transposes(path):
+    # Torch 2.4 symbolic_opset9.movedim leaves negative source axes in ONNX
+    # Transpose.perm, while ONNX requires positive indices. Diffusers uses
+    # movedim(-1, 1) around RMSNorm. Resolve equivalent axis notation only;
+    # learned weights, operations, shapes and arithmetic remain unchanged.
+    import onnx
+    graph = onnx.load(str(path))
+    changes = []
+
+    def visit(current):
+        for node in current.node:
+            for attribute in node.attribute:
+                if node.op_type == "Transpose" and attribute.name == "perm":
+                    original = list(attribute.ints)
+                    positive = canonical_transpose_perm(original)
+                    if original != positive:
+                        changes.append({"node": node.name, "before": original, "after": positive})
+                        attribute.ints[:] = positive
+                elif attribute.type == onnx.AttributeProto.GRAPH:
+                    visit(attribute.g)
+                elif attribute.type == onnx.AttributeProto.GRAPHS:
+                    for child in attribute.graphs:
+                        visit(child)
+
+    visit(graph.graph)
+    if changes:
+        onnx.save(graph, str(path))
+    return changes
+
+
 def file_identity(path):
     digest = hashlib.sha256()
     size = 0
@@ -322,6 +362,7 @@ def export_stage(args, directory, report, lock):
                           opset_version=17, dynamo=False, do_constant_folding=True)
     del wrapper, vae, inputs, arrays
     gc.collect()
+    report["transpose_axis_canonicalization"] = canonicalize_exported_transposes(directory / "model.onnx")
     report["export_passed"] = True
     report["artifacts"] = {
         name: file_identity(directory / name)
