@@ -1,0 +1,67 @@
+name: MobileI2V Baseline VAE Qualification
+
+on:
+  push:
+    branches: [feat/mobilei2v-vae-qualification]
+    paths:
+      - 'tools/mobilei2v/qualify_vae.py'
+      - 'tools/mobilei2v/test_vae_qualification.py'
+      - 'tools/mobilei2v/auxiliary.lock.properties'
+      - 'tools/mobilei2v/qualification-requirements.txt'
+      - '.github/workflows/mobilei2v-vae-qualification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobilei2v-vae-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  vae:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        stage: [encoder, decoder]
+    env:
+      HF_HUB_OFFLINE: '1'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pinned CPU qualification dependencies
+        run: |
+          python -m pip install --no-cache-dir setuptools==75.8.0 wheel==0.45.1
+          python -m pip install --no-cache-dir torch==2.4.0 torchvision==0.19.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir --no-build-isolation -r tools/mobilei2v/qualification-requirements.txt
+      - name: Verify evidence checks
+        run: python tools/mobilei2v/test_vae_qualification.py
+      - name: Fetch author-confirmed baseline VAE snapshot
+        run: |
+          mkdir -p "$RUNNER_TEMP/vae"
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/vae/config.json" 'https://huggingface.co/Lightricks/LTX-Video/resolve/8984fa25007f376c1a299016d0957a37a2f797bb/vae/config.json'
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/vae/diffusion_pytorch_model.safetensors" 'https://huggingface.co/Lightricks/LTX-Video/resolve/8984fa25007f376c1a299016d0957a37a2f797bb/vae/diffusion_pytorch_model.safetensors'
+      - name: Execute full-size baseline and compare exported graph
+        run: |
+          python -u tools/mobilei2v/qualify_vae.py \
+            --vae-dir "$RUNNER_TEMP/vae" \
+            --stage '${{ matrix.stage }}' \
+            --output-dir qualification
+      - name: Upload diagnostic report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobilei2v-vae-${{ matrix.stage }}-qualification
+          path: qualification/${{ matrix.stage }}/report.json
+          if-no-files-found: warn
+      - name: Upload qualified host graph and parity fixtures
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobilei2v-vae-${{ matrix.stage }}-onnx-host-only
+          path: qualification/${{ matrix.stage }}/
+          if-no-files-found: error
+          retention-days: 7
