@@ -1,0 +1,29 @@
+{
+  "version": "0.7.1",
+  "version_code": 8,
+  "package": "com.qujindai.localvideo",
+  "source_commit": "4f0f37633b3929a65bff4bf810f1d4852ca7a455",
+  "workflow_run": 34689412394,
+  "workflow_job": 103541931688,
+  "artifact_id": 10296882117,
+  "apk_file": "LocalVideoLab_v0.7.1_S24U_arm64.apk",
+  "apk_bytes": 93505685,
+  "apk_sha256": "d55421e450bc04c6f988ccd3a85b1fefc3d3ba7fe1bed7ff23c276ecccd7cda6",
+  "signing_certificate_sha256": "c9329387060f0259870e30b7bca6b9d9684ed86de716676962a1e75ef7f346ac",
+  "jvm_test_suites": 17,
+  "jvm": {
+    "tests": 66,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "archive_digest_verified": true,
+  "downloaded_apk_digest_matches_ci": true,
+  "native_declared_type_guard_present": true,
+  "handset_tested": false,
+  "mobilei2v_model_pack_included": false,
+  "mobilei2v_generation_qualified": false,
+  "workflow_url": "https://github.com/QuJindai/mobile-local-video-lab/actions/runs/34689412394",
+  "ci_apk_16kb_elf_gate_passed": true,
+  "code_review": "PASS after serialized input dtype preflight correction"
+}
