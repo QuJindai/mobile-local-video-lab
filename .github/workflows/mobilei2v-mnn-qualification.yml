@@ -1,0 +1,86 @@
+name: MobileI2V MNN Host Qualification
+
+on:
+  push:
+    branches: [feat/mobilei2v-mnn-qualification]
+    paths:
+      - 'tools/mobilei2v/qualify_mnn.py'
+      - 'tools/mobilei2v/mnn_forward.cpp'
+      - 'tools/mobilei2v/test_mnn_qualification.py'
+      - '.github/workflows/mobilei2v-mnn-qualification.yml'
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: Successful baseline VAE qualification run to verify
+        required: true
+        default: '34683171712'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: mobilei2v-mnn-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  parity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        stage: [encoder, decoder]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install graph inspection dependencies
+        run: python -m pip install --no-cache-dir numpy==1.26.4 onnx==1.17.0
+      - name: Test MNN evidence gates
+        run: python tools/mobilei2v/test_mnn_qualification.py
+      - name: Download qualified VAE graph and exact parity inputs
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.source_run_id || '34683171712' }}
+          name: mobilei2v-vae-${{ matrix.stage }}-onnx-host-only
+          path: source-qualification
+      - name: Build pinned MNN converter and CPU runtime
+        run: |
+          git clone --filter=blob:none --no-checkout https://github.com/alibaba/MNN.git "$RUNNER_TEMP/MNN"
+          git -C "$RUNNER_TEMP/MNN" checkout --detach 3db3cc904dfea55286972b472b040ad5525aa083
+          cmake -S "$RUNNER_TEMP/MNN" -B "$RUNNER_TEMP/mnn-build" \
+            -DCMAKE_BUILD_TYPE=Release -DMNN_BUILD_CONVERTER=ON \
+            -DMNN_BUILD_TOOLS=OFF -DMNN_SEP_BUILD=OFF \
+            -DMNN_OPENCL=OFF -DMNN_VULKAN=OFF -DMNN_CUDA=OFF
+          cmake --build "$RUNNER_TEMP/mnn-build" --target MNNConvert --parallel 4
+          g++ -std=c++17 -O2 tools/mobilei2v/mnn_forward.cpp \
+            -I "$RUNNER_TEMP/MNN/include" \
+            -I "$RUNNER_TEMP/MNN/3rd_party" \
+            -L "$RUNNER_TEMP/mnn-build" -Wl,-rpath,"$RUNNER_TEMP/mnn-build" \
+            -lMNN -o "$RUNNER_TEMP/mnn-forward"
+      - name: Compare converted model with exact PyTorch reference
+        run: |
+          python -u tools/mobilei2v/qualify_mnn.py \
+            --source-dir source-qualification \
+            --stage '${{ matrix.stage }}' \
+            --output-dir mnn-qualification \
+            --mnn-source "$RUNNER_TEMP/MNN" \
+            --converter "$RUNNER_TEMP/mnn-build/MNNConvert" \
+            --runner "$RUNNER_TEMP/mnn-forward"
+      - name: Upload MNN diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobilei2v-mnn-${{ matrix.stage }}-qualification
+          path: mnn-qualification/**/report.json
+          if-no-files-found: warn
+      - name: Upload qualified CPU model and evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobilei2v-mnn-${{ matrix.stage }}-host-only
+          path: mnn-qualification/
+          if-no-files-found: error
+          retention-days: 7
