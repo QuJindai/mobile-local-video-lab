@@ -59,3 +59,33 @@ denoiser-only export still leaves the following acceptance incomplete:
 
 Only then can the APK and model pack be delivered as a MobileI2V-enabled build.
 There is no airplane-mode acceptance gate. Keep the stable baseline available.
+
+## Measured VAE qualification, 2026-09-12
+
+Both baseline VAE stages passed their full-size PyTorch/ONNX Runtime checks in
+[run 34683171712](https://github.com/QuJindai/mobile-local-video-lab/actions/runs/34683171712),
+at source commit `eef5315ffd3b4747fcda438936bcf7aa4171f024`. The exact reports are
+stored in [encoder evidence](evidence/mobilei2v-vae-encoder.json) and
+[decoder evidence](evidence/mobilei2v-vae-decoder.json). These measurements use
+synthetic diagnostic inputs; they are not video-quality or handset evidence.
+
+| Stage | Compared values | Maximum absolute error | RMSE | Result |
+| --- | ---: | ---: | ---: | --- |
+| Encoder, explicit posterior sample | 117,760 | 0.000001431 | 0.000000229 | Pass |
+| Decoder, 17 frames cropped to 720p | 47,001,600 | 0.000016332 | 0.000001384 | Pass |
+
+Both use FP32 and elementwise `atol=0.0001`, `rtol=0.001`. Strict loading covered
+all 190 checkpoint tensors without missing or unexpected keys. The encoder
+also passed explicit NumPy/PyTorch posterior-sampling parity. The observed raw
+decoder shape was `[1,3,17,736,1280]` before the required top crop.
+
+The first real run exposed a Torch 2.4 export defect: the symbolic lowering of
+`movedim(-1, 1)` writes negative `Transpose.perm` entries rejected by ONNX Runtime.
+The exporter now canonicalizes those axes to equivalent positive indices and
+records every rewritten permutation in the reports. No weights, arithmetic,
+precision, crop, or sampling were changed. The numerical comparison above was
+performed after this correction.
+
+VAE ONNX qualification is complete for these fixtures. Denoiser qualification,
+MNN conversion, Android interface changes and actual Adreno execution remain
+separate gates. The previous APK has not thereby become MobileI2V-ready.

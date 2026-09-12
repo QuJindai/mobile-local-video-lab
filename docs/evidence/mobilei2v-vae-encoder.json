@@ -1,0 +1,1079 @@
+{
+  "format": "mobilei2v-baseline-vae-qualification-v1",
+  "stage": "encoder",
+  "mobilei2v_source_commit": "8d0a253c766b05a43ba408baf5e8f800a36be8b4",
+  "qualification_scope": "one VAE stage; not end-to-end I2V",
+  "execution": "host-cpu",
+  "vae_qualification_passed": true,
+  "export_passed": true,
+  "android_gpu_pack_ready": false,
+  "boundary_dtype": "float32",
+  "weight_dtype": "float32",
+  "operation_dtype": "float32",
+  "scaling_factor": 1.0,
+  "latents_mean_std_normalization": false,
+  "posterior": "mean + exp(0.5 * clamp(logvar, -30, 20)) * explicit posterior_epsilon",
+  "image_layout": "NCHW RGB [-1,1]; unsqueeze time axis 2; no external padding",
+  "decoder_crop": {
+    "raw_shape": [
+      1,
+      3,
+      17,
+      736,
+      1280
+    ],
+    "rows": [
+      0,
+      720
+    ],
+    "resize": false
+  },
+  "video_values": "raw decoder RGB float32; no clamp, rescale, uint8 or MP4 encoding",
+  "reference_tiling": false,
+  "opset": 17,
+  "expected_contract": {
+    "inputs": {
+      "image": {
+        "dtype": "float32",
+        "shape": [
+          1,
+          3,
+          720,
+          1280
+        ]
+      },
+      "posterior_epsilon": {
+        "dtype": "float32",
+        "shape": [
+          1,
+          128,
+          1,
+          23,
+          40
+        ]
+      }
+    },
+    "outputs": {
+      "guide": {
+        "dtype": "float32",
+        "shape": [
+          1,
+          128,
+          1,
+          23,
+          40
+        ]
+      }
+    }
+  },
+  "remaining": [
+    "other VAE stage and end-to-end I2V acceptance",
+    "MNN conversion parity",
+    "actual handset Adreno execution and performance"
+  ],
+  "auxiliary_lock": {
+    "bytes": 777,
+    "sha256": "93806210fd25d7c79eccdcb1f24b4baea521afa89847d00e02134c4c7c482c0e"
+  },
+  "pins": {
+    "vae.repo": "Lightricks/LTX-Video",
+    "vae.revision": "8984fa25007f376c1a299016d0957a37a2f797bb",
+    "vae.subfolder": "vae",
+    "vae.config": "vae/config.json",
+    "vae.weights": "vae/diffusion_pytorch_model.safetensors",
+    "vae.weights.bytes": "1676798532",
+    "vae.weights.sha256": "265ca87cb5dff5e37f924286e957324e282fe7710a952a7dafc0df43883e2010",
+    "vae.author.confirmation": "https://github.com/hustvl/MobileI2V/issues/2#issuecomment-3588124983",
+    "vae.scaling_factor": "1.0",
+    "vae.posterior": "sample",
+    "vae.raw.height": "736",
+    "vae.output.crop.rows": "0:720"
+  },
+  "script": {
+    "bytes": 25406,
+    "sha256": "74f22902f2260d6a1f600f2916ad2e8aee4747b12e23728a0578ec4920ea5fcd"
+  },
+  "runtime_versions": {
+    "export": {
+      "python": "3.11.16",
+      "numpy": "1.26.4",
+      "torch": "2.4.0+cpu",
+      "diffusers": "0.35.2",
+      "safetensors": "0.6.2",
+      "onnx": "1.17.0",
+      "onnxruntime": "1.20.1"
+    },
+    "ort": {
+      "python": "3.11.16",
+      "numpy": "1.26.4",
+      "torch": "2.4.0+cpu",
+      "diffusers": "0.35.2",
+      "safetensors": "0.6.2",
+      "onnx": "1.17.0",
+      "onnxruntime": "1.20.1"
+    }
+  },
+  "threads": {
+    "export": 4,
+    "ort": 4
+  },
+  "host": {
+    "system": "Linux",
+    "machine": "x86_64"
+  },
+  "phase": "ort",
+  "checkpoint": {
+    "bytes": 1676798532,
+    "sha256": "265ca87cb5dff5e37f924286e957324e282fe7710a952a7dafc0df43883e2010"
+  },
+  "config_file": {
+    "bytes": 501,
+    "sha256": "e8f12ad5305b1508f6e456797d48ab8e9fdd091c686ccf814a293ee96ce89dbb"
+  },
+  "source_config": {
+    "_class_name": "AutoencoderKLLTXVideo",
+    "_diffusers_version": "0.32.0.dev0",
+    "block_out_channels": [
+      128,
+      256,
+      512,
+      512
+    ],
+    "decoder_causal": false,
+    "encoder_causal": true,
+    "in_channels": 3,
+    "latent_channels": 128,
+    "layers_per_block": [
+      4,
+      3,
+      3,
+      3,
+      4
+    ],
+    "out_channels": 3,
+    "patch_size": 4,
+    "patch_size_t": 1,
+    "resnet_norm_eps": 1e-06,
+    "scaling_factor": 1.0,
+    "spatio_temporal_scaling": [
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "weight_coverage": {
+    "strict": true,
+    "missing": [],
+    "unexpected": [],
+    "tensors": 190,
+    "elements": 419193905,
+    "parameters": 419193649,
+    "manifest_sha256": "9257b52c03b28e611e5f5512d61a1e8b23da46ac8de4b8fa2cf4e3c6c3c3d470"
+  },
+  "effective_config": {
+    "in_channels": 3,
+    "out_channels": 3,
+    "latent_channels": 128,
+    "block_out_channels": [
+      128,
+      256,
+      512,
+      512
+    ],
+    "down_block_types": [
+      "LTXVideoDownBlock3D",
+      "LTXVideoDownBlock3D",
+      "LTXVideoDownBlock3D",
+      "LTXVideoDownBlock3D"
+    ],
+    "decoder_block_out_channels": [
+      128,
+      256,
+      512,
+      512
+    ],
+    "layers_per_block": [
+      4,
+      3,
+      3,
+      3,
+      4
+    ],
+    "decoder_layers_per_block": [
+      4,
+      3,
+      3,
+      3,
+      4
+    ],
+    "spatio_temporal_scaling": [
+      true,
+      true,
+      true,
+      false
+    ],
+    "decoder_spatio_temporal_scaling": [
+      true,
+      true,
+      true,
+      false
+    ],
+    "decoder_inject_noise": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    "downsample_type": [
+      "conv",
+      "conv",
+      "conv",
+      "conv"
+    ],
+    "upsample_residual": [
+      false,
+      false,
+      false,
+      false
+    ],
+    "upsample_factor": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "timestep_conditioning": false,
+    "patch_size": 4,
+    "patch_size_t": 1,
+    "resnet_norm_eps": 1e-06,
+    "scaling_factor": 1.0,
+    "encoder_causal": true,
+    "decoder_causal": false,
+    "spatial_compression_ratio": null,
+    "temporal_compression_ratio": null,
+    "_use_default_values": [
+      "timestep_conditioning",
+      "upsample_residual",
+      "decoder_block_out_channels",
+      "downsample_type",
+      "decoder_layers_per_block",
+      "upsample_factor",
+      "temporal_compression_ratio",
+      "decoder_spatio_temporal_scaling",
+      "decoder_inject_noise",
+      "down_block_types",
+      "spatial_compression_ratio"
+    ],
+    "_class_name": "AutoencoderKLLTXVideo",
+    "_diffusers_version": "0.32.0.dev0"
+  },
+  "diffusers_source_files": {
+    "AutoencoderKLLTXVideo": {
+      "bytes": 64433,
+      "sha256": "190108cb99ae5d49ddc18447e2394215441a9db8225021cb35a12755c2f6f3a8"
+    },
+    "DiagonalGaussianDistribution": {
+      "bytes": 32733,
+      "sha256": "5d79b5d057d0f702e1a335a89913b695d7dc6faa91f3978f17e4a153162afba6"
+    },
+    "RMSNorm": {
+      "bytes": 24616,
+      "sha256": "1e47b705703519801504aae4262ed7f00d032d3ebf36a3f676fd90ee56454d15"
+    }
+  },
+  "inputs_origin": {
+    "synthetic": true,
+    "rng": "numpy.PCG64",
+    "seed": 1
+  },
+  "numpy_posterior_parity": {
+    "passed": true,
+    "max_absolute_error": 5.960464477539063e-08,
+    "rmse": 3.5382483918546577e-10,
+    "atol": 1e-06,
+    "rtol": 1e-05,
+    "elements": 117760,
+    "finite": true
+  },
+  "pytorch_full_shape_forward": true,
+  "transpose_axis_canonicalization": [
+    {
+      "node": "/encoder/down_blocks.0/resnets.0/Transpose_1",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.0/resnets.0/Transpose_3",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.0/resnets.1/Transpose_1",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.0/resnets.1/Transpose_3",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.0/resnets.2/Transpose_1",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.0/resnets.2/Transpose_3",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.0/resnets.3/Transpose_1",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.0/resnets.3/Transpose_3",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.0/conv_out/Transpose_1",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.0/conv_out/Transpose_3",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.0/conv_out/Transpose_4",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.1/resnets.0/Transpose_1",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.1/resnets.0/Transpose_3",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.1/resnets.1/Transpose_1",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.1/resnets.1/Transpose_3",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.1/resnets.2/Transpose_1",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.1/resnets.2/Transpose_3",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.1/conv_out/Transpose_1",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.1/conv_out/Transpose_3",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.1/conv_out/Transpose_4",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.2/resnets.0/Transpose_1",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.2/resnets.0/Transpose_3",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.2/resnets.1/Transpose_1",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.2/resnets.1/Transpose_3",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.2/resnets.2/Transpose_1",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.2/resnets.2/Transpose_3",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.3/resnets.0/Transpose_1",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.3/resnets.0/Transpose_3",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.3/resnets.1/Transpose_1",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.3/resnets.1/Transpose_3",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.3/resnets.2/Transpose_1",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/down_blocks.3/resnets.2/Transpose_3",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/mid_block/resnets.0/Transpose_1",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/mid_block/resnets.0/Transpose_3",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/mid_block/resnets.1/Transpose_1",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/mid_block/resnets.1/Transpose_3",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/mid_block/resnets.2/Transpose_1",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/mid_block/resnets.2/Transpose_3",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/mid_block/resnets.3/Transpose_1",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/mid_block/resnets.3/Transpose_3",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "node": "/encoder/Transpose_2",
+      "before": [
+        0,
+        -1,
+        1,
+        2,
+        3
+      ],
+      "after": [
+        0,
+        4,
+        1,
+        2,
+        3
+      ]
+    }
+  ],
+  "artifacts": {
+    "model.onnx": {
+      "bytes": 721850267,
+      "sha256": "2a4664325bed3568cb70e8d4c77484d68a1cd8131701faf52e8b050634c8db9f"
+    },
+    "reference.npy": {
+      "bytes": 471168,
+      "sha256": "a95bfebe2c62d28b49d2be984c8dfa64a7fd3709dc999892d52bcd68f7f28ab2"
+    },
+    "image.npy": {
+      "bytes": 11059328,
+      "sha256": "812b913666c01324a150716720ecaa2bf6c29e6761d74c682cfcb0de0d3111cb"
+    },
+    "posterior_epsilon.npy": {
+      "bytes": 471168,
+      "sha256": "2b7a3deed1c170742539e114bdd77b059bef27feffd53ce8968e3b199c18c173"
+    }
+  },
+  "measurements": {
+    "export": {
+      "elapsed_seconds": 21.050501247,
+      "peak_rss_kib_linux": 4239780
+    },
+    "ort": {
+      "elapsed_seconds": 6.931917287999994,
+      "peak_rss_kib_linux": 2186788
+    }
+  },
+  "onnx_contract": {
+    "inputs": {
+      "image": {
+        "dtype": "float32",
+        "shape": [
+          1,
+          3,
+          720,
+          1280
+        ]
+      },
+      "posterior_epsilon": {
+        "dtype": "float32",
+        "shape": [
+          1,
+          128,
+          1,
+          23,
+          40
+        ]
+      }
+    },
+    "outputs": {
+      "guide": {
+        "dtype": "float32",
+        "shape": [
+          1,
+          128,
+          1,
+          23,
+          40
+        ]
+      }
+    }
+  },
+  "onnx_opsets": {
+    "ai.onnx": 17
+  },
+  "onnx_checker_passed": true,
+  "ort_providers": [
+    "CPUExecutionProvider"
+  ],
+  "onnx_parity": {
+    "passed": true,
+    "max_absolute_error": 1.430511474609375e-06,
+    "rmse": 2.2883071756264987e-07,
+    "atol": 0.0001,
+    "rtol": 0.001,
+    "elements": 117760,
+    "finite": true
+  }
+}
