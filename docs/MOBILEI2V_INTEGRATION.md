@@ -96,9 +96,9 @@ records every rewritten permutation in the reports. No weights, arithmetic,
 precision, crop, or sampling were changed. The numerical comparison above was
 performed after this correction.
 
-VAE ONNX qualification is complete for these fixtures. MNN conversion, Android
-interface changes and actual Adreno execution remain separate gates. The
-previous APK has not thereby become MobileI2V-ready.
+VAE ONNX qualification is complete for these fixtures. The MNN CPU result is
+recorded below. Android interface changes and actual Adreno execution remain
+separate gates. The previous APK has not thereby become MobileI2V-ready.
 
 ## Denoiser result and remaining blocker
 
@@ -159,9 +159,28 @@ MNN's AVX2 CPU extension (backend 13), `Precision_High`, four threads and the
 default Winograd setting. Conversion and execution alone do not qualify these
 models. The earlier backend classification defect has been corrected.
 
-The next diagnostic uses `WINOGRAD_MEMORY_LEVEL=0`. In the pinned CPU factory,
-this selects dense convolution instead of Winograd transforms. This is a
-measured hypothesis about numerical accumulation, not an established cause or
-a relaxed acceptance rule. Weights, graphs, inputs and tolerances are unchanged.
-Failed models and outputs are now retained separately for three days to support
-further diagnosis. Neither VAE MNN stage nor the full GPU pack is ready yet.
+The follow-up [run 34685059248](https://github.com/QuJindai/mobile-local-video-lab/actions/runs/34685059248)
+at `b7ef633da484ba231d61dc965e1df1baaacffce9` passed **both** VAE stages with
+`WINOGRAD_MEMORY_LEVEL=0`. In the pinned CPU factory this selects dense
+convolution instead of Winograd transforms. Source graphs, original weights,
+full-size inputs and numerical tolerances remained unchanged.
+
+| Stage with dense CPU convolution | Maximum absolute error | RMSE | Result |
+| --- | ---: | ---: | --- |
+| Encoder | 0.000002146 | 0.000000361 | Pass |
+| Decoder | 0.000020236 | 0.000001500 | Pass |
+
+Both reports verified artifact identities again after execution. The unmodified
+[encoder report](evidence/mobilei2v-mnn-encoder-dense.json) and
+[decoder report](evidence/mobilei2v-mnn-decoder-dense.json) record exact shapes,
+hashes, tolerances, actual CPU backend and the disabled Winograd setting. The
+workflow retains the successful converted models and exact fixtures as
+`mobilei2v-mnn-encoder-host-only` and `mobilei2v-mnn-decoder-host-only` for seven
+days. Failed models and outputs are retained separately for three days.
+
+This qualifies the two VAE stages on the tested CPU fixtures with that setting.
+It does not establish Adreno correctness, mobile speed/memory suitability or
+generated-video quality. The next model blocker is denoiser precision and MNN
+conversion. Its GPU diagnostic is prepared but did not start after the service
+returned HTTP 402. Android contract changes, actual Adreno execution and one
+integrated image-to-video acceptance must follow before a new MobileI2V APK.
