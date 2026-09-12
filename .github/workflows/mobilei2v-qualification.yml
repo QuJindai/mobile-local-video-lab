@@ -1,0 +1,61 @@
+name: MobileI2V Real Model Qualification
+
+on:
+  push:
+    branches: [feat/mobilei2v-export-verify]
+    paths:
+      - 'tools/mobilei2v/**'
+      - '.github/workflows/mobilei2v-qualification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobilei2v-qualification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  denoiser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      DISABLE_XFORMERS: '1'
+      MMCV_WITH_OPS: '0'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU diagnostic dependencies
+        run: |
+          python -m pip install --no-cache-dir torch==2.4.0 torchvision==0.19.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir -r tools/mobilei2v/qualification-requirements.txt
+      - name: Test release evidence checks
+        run: python tools/mobilei2v/test_qualification.py
+      - name: Fetch pinned upstream and original weights
+        run: |
+          git clone --filter=blob:none --no-checkout https://github.com/hustvl/MobileI2V.git "$RUNNER_TEMP/MobileI2V"
+          git -C "$RUNNER_TEMP/MobileI2V" checkout --detach 8d0a253c766b05a43ba408baf5e8f800a36be8b4
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/hybrid_371.pth" 'https://huggingface.co/hustvl/MobileI2V/resolve/290b2d0dfa93c65388b93e3f7591d7328b335e65/hybrid_371.pth'
+      - name: Execute original checkpoint and compare ONNX export
+        run: |
+          python -u tools/mobilei2v/qualify_upstream.py \
+            --upstream "$RUNNER_TEMP/MobileI2V" \
+            --checkpoint "$RUNNER_TEMP/hybrid_371.pth" \
+            --onnx qualification/denoiser.onnx \
+            --report qualification/report.json
+      - name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobilei2v-upstream-qualification
+          path: qualification/report.json
+          if-no-files-found: warn
+      - name: Upload qualified denoiser export
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobilei2v-denoiser-onnx-host-only
+          path: qualification/denoiser.onnx*
+          if-no-files-found: error
+          retention-days: 7
