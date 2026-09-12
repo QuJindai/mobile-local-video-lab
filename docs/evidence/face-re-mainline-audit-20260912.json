@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "checked_date_utc": "2026-09-12",
+  "repository": "QuJindai/mobile-local-video-lab",
+  "reviewed_commit": "f653fb5f8e71830a5d819532c347949c4d2ee9c7",
+  "reviewed_tree": "cb55f68cd7852a5945020eceb78cfd9082fc90e7",
+  "reviewed_branch": "feat/v080-motion-studio",
+  "correction_branch": "feat/face-re-mainline",
+  "delivered_apk": {
+    "version_name": "0.8.1",
+    "version_code": 10,
+    "application_id": "com.qujindai.localvideo",
+    "sha256": "12c46977bad9c8246dd3feec50f9d7ad65623e45a86185ae120ded44020b5ab2",
+    "face_swap_implemented": false,
+    "identity_conditioning_implemented": false
+  },
+  "source_audit": {
+    "scope": "Tracked .java/.cpp/.h/.xml/.gradle files under app, tools, scripts at reviewed commit; backed by manual review of app source inventory, backend routing, README and prior PR scope.",
+    "file_count": 66,
+    "search_pattern": "inswapper|faceswap|face[-_ ]?swap|photomaker|faceid|arcface|retinaface|scrfd|identity[-_ ]?condition|换脸|保脸",
+    "matches": [],
+    "interpretation": "No face-swap or identity-conditioned generation pipeline found in the reviewed app. Text search is supporting evidence, not an inference/quality test."
+  },
+  "reviewed_remote_branches": [
+    "feat/mobilei2v-denoiser-precision",
+    "feat/mobilei2v-export-verify",
+    "feat/mobilei2v-mnn-qualification",
+    "feat/mobilei2v-vae-qualification",
+    "feat/rife-local-video",
+    "feat/v04-model-backends",
+    "feat/v07-mobilei2v-gpu",
+    "feat/v071-handset-test",
+    "feat/v080-motion-studio",
+    "main",
+    "release/v0.3.0"
+  ],
+  "remote_prs": [
+    {
+      "number": 1,
+      "scope": "RIFE local-video APK"
+    },
+    {
+      "number": 2,
+      "scope": "V0.3 RIFE handset-validated baseline"
+    },
+    {
+      "number": 3,
+      "scope": "V0.5 RIFE / Depth / MobileI2V foundations",
+      "draft": true
+    },
+    {
+      "number": 4,
+      "scope": "V0.7 MobileI2V GPU runtime",
+      "draft": true
+    }
+  ],
+  "legacy_sources": [
+    {
+      "repository": "QuJindai/mllm-android-lab",
+      "commit": "e98256df5dfaf716981ac381d6e772e76cd4af45",
+      "path": "experiments/portrait-lab-mobile",
+      "observed": "PhotoMaker implementation plan and gateway forwarding reference paths/prompt/size/style strength to upstream UI; not migrated into reviewed APK."
+    },
+    {
+      "repository": "QuJindai/mllm-windows-ai-workbench",
+      "commit": "e23df7286d8a3832d13cd606dc109b6b3209db7f",
+      "path": "s24u-image-harness/README.md",
+      "observed": "Local Dream image generation harness reference; read README does not establish FaceID execution."
+    },
+    {
+      "repository": "QuJindai/FaceLiVT-Mobile-Lab",
+      "commit": "eb4a4525490b4ff802f9ea958cff073e21de9782",
+      "path": "README.md",
+      "observed": "Face recognition and identity enrollment workbench; not a delivered face-swap pipeline in this APK."
+    }
+  ],
+  "conclusion": "FACE-RE mainline not delivered. Resume identity-model implementation in designated public repository. MobileI2V is secondary and not a prerequisite.",
+  "limitations": [
+    "Not an exhaustive audit of every historical commit or inaccessible artifact.",
+    "No claim that old PhotoMaker/FaceID handset inference passed or that existing working face-swap code was deleted.",
+    "This correction changes documentation only; no new APK or new face functionality."
+  ]
+}

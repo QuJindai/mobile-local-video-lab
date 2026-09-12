@@ -4,10 +4,24 @@
 
 Android/Snapdragon experiments for fully offline neural video generation.
 
-## Current priority: real MobileI2V integration
+## Current priority: FACE-RE 换脸／保脸主线
 
-MobileI2V model execution and conversion acceptance remain an active integration
-track. The user-requested V0.8 feature branch improves the already executable
+The user corrected the development priority on 2026-09-12: **face swapping /
+identity-preserving portrait creation is the main feature**. The delivered
+V0.8.1 APK has no face-swap or identity-conditioning pipeline. Its RIFE/Depth
+motion features and successful video tests do not establish FACE-RE completion.
+
+Continue development on `feat/face-re-mainline` in this public repository. The
+next implementation must connect an actual identity model to a reference photo
+and produce a saved, verifiable face result. The recovered requirements, source
+locations, missing implementation and acceptance sequence are recorded in
+[FACE-RE mainline status](docs/FACE_RE_MAINLINE.md). This correction records scope
+and status; it does not add a working face model or a new APK.
+
+## Secondary track: MobileI2V integration
+
+MobileI2V model execution and conversion acceptance remain an incomplete secondary
+track, not a prerequisite for FACE-RE. The V0.8 feature branch improved the already executable
 Depth/RIFE workflow while retaining MobileI2V gates. The baseline VAE encoder and decoder passed full-resolution
 PyTorch/ONNX and MNN CPU parity on 2026-09-12; the qualified MNN CPU setting
 disables Winograd. The real denoiser runs and exports, but its FP16 numerical
