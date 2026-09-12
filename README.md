@@ -1,4 +1,4 @@
-> V0.8.0 运镜工作台：[本机测试说明](docs/V0.8.0_HANDSET_TEST.md)。新增弧线环绕、升降、拉远、三档强度、往返循环与更长视频；修复 RIFE 末段停帧。MobileI2V 完整模型包及出片验收尚未完成。
+> V0.8.1 实机反馈修正：[视频核验与界面修复](docs/V0.8.1_HANDSET_FEEDBACK.md)。上传样片确认 64 帧 / 8 秒往返序列；修正滚动内容遮挡系统栏。[V0.8 运镜功能](docs/V0.8.0_HANDSET_TEST.md)全部保留。MobileI2V 完整模型包及出片验收尚未完成。
 
 # Mobile Local Video Lab
 

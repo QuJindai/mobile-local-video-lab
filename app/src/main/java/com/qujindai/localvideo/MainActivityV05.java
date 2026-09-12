@@ -35,7 +35,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * V0.8.0 handset workbench.
+ * V0.8.1 handset workbench.
  *
  * RIFE is the validated baseline, Depth 3D is a genuine second local model path,
  * and MobileI2V remains blocked until a compatible model pack passes its gates.
@@ -144,23 +144,28 @@ public final class MainActivityV05 extends Activity {
     }
 
     private View buildUi() {
+        FrameLayout viewport = new FrameLayout(this);
+        viewport.setClipToPadding(true);
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
+        viewport.addView(scroll, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(16), dp(18), dp(16), dp(44));
-        scroll.setOnApplyWindowInsetsListener((view, insets) -> {
+        // System-bar space belongs to the fixed viewport. Padding on root
+        // scrolls away with the content and cannot protect controls while scrolling.
+        viewport.setOnApplyWindowInsetsListener((view, insets) -> {
             if (Build.VERSION.SDK_INT >= 30) {
                 android.graphics.Insets bars = insets.getInsets(
                         android.view.WindowInsets.Type.systemBars()
                                 | android.view.WindowInsets.Type.displayCutout());
-                root.setPadding(dp(16) + bars.left, dp(18) + bars.top,
-                        dp(16) + bars.right, dp(24) + bars.bottom);
+                viewport.setPadding(bars.left, bars.top, bars.right, bars.bottom);
             } else {
-                root.setPadding(dp(16) + insets.getSystemWindowInsetLeft(),
-                        dp(18) + insets.getSystemWindowInsetTop(),
-                        dp(16) + insets.getSystemWindowInsetRight(),
-                        dp(24) + insets.getSystemWindowInsetBottom());
+                viewport.setPadding(insets.getSystemWindowInsetLeft(),
+                        insets.getSystemWindowInsetTop(),
+                        insets.getSystemWindowInsetRight(),
+                        insets.getSystemWindowInsetBottom());
             }
             return insets;
         });
@@ -173,7 +178,7 @@ public final class MainActivityV05 extends Activity {
         TextView title = text("Local Video Lab", 25, true);
         titleRow.addView(title, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        TextView badge = text("V0.8.0", 12, true);
+        TextView badge = text("V0.8.1", 12, true);
         badge.setTextColor(Color.WHITE);
         badge.setGravity(Gravity.CENTER);
         badge.setBackground(rounded(COLOR_ACCENT, 20));
@@ -229,7 +234,7 @@ public final class MainActivityV05 extends Activity {
         diagnosticsButton.setVisibility(View.VISIBLE);
         diagnosticsButton.setOnClickListener(v -> shareDiagnostics());
         root.addView(diagnosticsButton);
-        return scroll;
+        return viewport;
     }
 
     private void buildModelLab(LinearLayout root) {
@@ -550,7 +555,7 @@ public final class MainActivityV05 extends Activity {
                     applyUiState();
                 });
             } catch (Throwable error) {
-                String diag = "Local Video Lab V0.8.0 · MobileI2V checkpoint download\n"
+                String diag = "Local Video Lab V0.8.1 · MobileI2V checkpoint download\n"
                         + source.label + "\n" + error.getClass().getName() + "\n" + safeMessage(error);
                 runOnUiThread(() -> {
                     checkpointDownloading = false;
@@ -659,7 +664,7 @@ public final class MainActivityV05 extends Activity {
                     applyUiState();
                 });
             } catch (Throwable error) {
-                String diag = "Local Video Lab V0.8.0 · model pack install\n"
+                String diag = "Local Video Lab V0.8.1 · model pack install\n"
                         + error.getClass().getName() + "\n" + safeMessage(error);
                 runOnUiThread(() -> {
                     modelInstalling = false;
@@ -1163,7 +1168,7 @@ public final class MainActivityV05 extends Activity {
     private void shareDiagnostics() {
         Intent intent = new Intent(Intent.ACTION_SEND);
         intent.setType("text/plain");
-        intent.putExtra(Intent.EXTRA_SUBJECT, "Local Video Lab V0.8.0 diagnostics");
+        intent.putExtra(Intent.EXTRA_SUBJECT, "Local Video Lab V0.8.1 diagnostics");
         intent.putExtra(Intent.EXTRA_TEXT, handsetDiagnostics());
         try {
             startActivity(Intent.createChooser(intent, "导出诊断信息"));
@@ -1174,8 +1179,8 @@ public final class MainActivityV05 extends Activity {
 
     private String handsetDiagnostics() {
         BackendRouter.Decision decision = currentBackendDecision();
-        return "Local Video Lab V0.8.0 · handset test\n"
-                + "package=com.qujindai.localvideo · versionCode=9\n"
+        return "Local Video Lab V0.8.1 · handset test\n"
+                + "package=com.qujindai.localvideo · versionCode=10\n"
                 + "设备=" + Build.MANUFACTURER + " " + Build.MODEL + "\n"
                 + "Android API=" + Build.VERSION.SDK_INT + "\n"
                 + (capabilities == null ? "设备能力未探测" : capabilities.summary()) + "\n"
@@ -1200,7 +1205,7 @@ public final class MainActivityV05 extends Activity {
                 ? String.format(Locale.US, "\n估深预处理: %.2f s", result.preprocessingMs / 1000.0)
                 : "";
         return String.format(Locale.US,
-                "Local Video Lab V0.8.0\n"
+                "Local Video Lab V0.8.1\n"
                         + "后端: %s\n"
                         + "模式: %s\n"
                         + "输出: %dx%d · %d 帧 · %d FPS\n"
@@ -1228,7 +1233,7 @@ public final class MainActivityV05 extends Activity {
 
     private String formatError(Throwable error) {
         return String.format(Locale.US,
-                "Local Video Lab V0.8.0\n"
+                "Local Video Lab V0.8.1\n"
                         + "状态: 生成失败\n"
                         + "后端: %s\n"
                         + "异常: %s\n"
