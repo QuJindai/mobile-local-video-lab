@@ -1,4 +1,4 @@
-> V0.9.0 FACE-RE 照片换脸候选版：参考人脸＋目标照片，经 SCRFD / ArcFace / INSwapper 本机处理后保存结果。真实模型 host 推理已通过，Android 与实机验收分开记录。见 [实现说明](docs/FACE_RE_PHOTO_IMPLEMENTATION.md) 与 [手机测试范围](docs/FACE_RE_PHOTO_HANDSET.md)。原视频功能保留。
+> V0.9.0 FACE-RE 照片换脸手机测试版已构建：参考人脸＋目标照片，经 SCRFD / ArcFace / INSwapper 本机处理后保存结果。真实模型 host 推理、Android 编译及签名校验通过，实机验收待完成。见 [构建证据](docs/evidence/face-re-v0.9.0-apk-build.json)、[实现说明](docs/FACE_RE_PHOTO_IMPLEMENTATION.md) 与 [手机测试范围](docs/FACE_RE_PHOTO_HANDSET.md)。原视频功能保留。
 
 # Mobile Local Video Lab
 
@@ -18,6 +18,14 @@ compositing, image save/share/history and task cancellation. Each selected
 photo must contain exactly one usable face. The initial download is 699 MiB;
 the APK carries the pinned manifest and identity projection. The existing
 video workbench remains accessible from the photo entry.
+
+The V0.9.0 APK was built from `0ceb23684505079fdbc27124fc836a26f2af10f5`
+by [Actions run 34757728468](https://github.com/QuJindai/mobile-local-video-lab/actions/runs/34757728468).
+The downloaded artifact passed SHA-256/CRC checks; 72 JVM tests, 29 face
+geometry/pixel tests and the Java/actual-model contract checks passed.
+It retains the V0.8.1 signing certificate. This establishes a verified handset
+test build; handset installation, visual quality and runtime behavior remain
+to be tested.
 
 The original V0.8.1 scope audit is preserved in
 [FACE-RE mainline status](docs/FACE_RE_MAINLINE.md). Host qualification proves

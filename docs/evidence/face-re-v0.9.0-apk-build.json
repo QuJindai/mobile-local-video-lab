@@ -1,0 +1,192 @@
+{
+  "schema_version": 1,
+  "status": "APK_BUILD_AND_ARTIFACT_VERIFIED_HANDSET_PENDING",
+  "repository": "QuJindai/mobile-local-video-lab",
+  "branch": "feat/face-re-mainline",
+  "source_commit": "0ceb23684505079fdbc27124fc836a26f2af10f5",
+  "source_tree": "2473dcd05a75143f6459f542956512d60e50c3b9",
+  "workflow_run_id": 34757728468,
+  "workflow_job_id": 103724922635,
+  "workflow_url": "https://github.com/QuJindai/mobile-local-video-lab/actions/runs/34757728468",
+  "workflow_conclusion": "success",
+  "workflow_completed_at": "2026-09-13T12:50:25Z",
+  "apk": {
+    "filename": "FaceRE_v0.9.0_S24U_arm64.apk",
+    "bytes": 94595128,
+    "sha256": "dec69a9f99fb927c7c865394dc4a775965feeb80b0436cc533a5f8791aafd5a7",
+    "application_id": "com.qujindai.localvideo",
+    "version_name": "0.9.0",
+    "version_code": 11,
+    "label": "FACE-RE",
+    "launcher": "com.qujindai.localvideo.FaceSwapActivity",
+    "abi": "arm64-v8a",
+    "certificate_sha256": "c9329387060f0259870e30b7bca6b9d9684ed86de716676962a1e75ef7f346ac",
+    "signing_verified_by": "Android build-tools 35.0.0 apksigner verify --verbose --print-certs in CI; downloaded bytes matched CI SHA-256",
+    "old_v081_certificate_match": true
+  },
+  "artifacts": [
+    {
+      "id": 10316993934,
+      "name": "face-re-v0.9.0-handset-test-apk",
+      "archive_sha256": "637ec18c6bcb70596fde24871866fba0382d5f15e1539603950b62a687b36f4a"
+    },
+    {
+      "id": 10317593333,
+      "name": "v0.9.0-jvm-test-results",
+      "archive_sha256": "531f0df9f987869b50be17bf046713bfc9a5e2dda2aecec00439c1b66d6411e7"
+    }
+  ],
+  "verification": {
+    "archive_sha256_matches_github": true,
+    "archive_and_apk_crc_pass": true,
+    "face_manifest_matches_source": true,
+    "emap_sha256_matches_source": true,
+    "depth_model_sha256_matches_source": true,
+    "jvm": {
+      "tests": 72,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "jvm_suites": [
+      {
+        "name": "com.qujindai.localvideo.AcceleratedPackManifestTest",
+        "tests": 7
+      },
+      {
+        "name": "com.qujindai.localvideo.BackendRouterTest",
+        "tests": 8
+      },
+      {
+        "name": "com.qujindai.localvideo.CheckpointDownloadPolicyTest",
+        "tests": 2
+      },
+      {
+        "name": "com.qujindai.localvideo.DepthMotionSpecTest",
+        "tests": 3
+      },
+      {
+        "name": "com.qujindai.localvideo.FaceDownloadCancellationTest",
+        "tests": 3
+      },
+      {
+        "name": "com.qujindai.localvideo.GenerationPlanTest",
+        "tests": 5
+      },
+      {
+        "name": "com.qujindai.localvideo.MobileI2VDownloadSourceTest",
+        "tests": 2
+      },
+      {
+        "name": "com.qujindai.localvideo.MobileI2VFlowEulerTest",
+        "tests": 6
+      },
+      {
+        "name": "com.qujindai.localvideo.MobileI2VRuntimeProbeTest",
+        "tests": 8
+      },
+      {
+        "name": "com.qujindai.localvideo.ModelPackManifestTest",
+        "tests": 4
+      },
+      {
+        "name": "com.qujindai.localvideo.MotionSpecTest",
+        "tests": 4
+      },
+      {
+        "name": "com.qujindai.localvideo.PackPathPolicyTest",
+        "tests": 3
+      },
+      {
+        "name": "com.qujindai.localvideo.RecentResultsTest",
+        "tests": 3
+      },
+      {
+        "name": "com.qujindai.localvideo.ResultRecordTest",
+        "tests": 4
+      },
+      {
+        "name": "com.qujindai.localvideo.RifeCommandTest",
+        "tests": 1
+      },
+      {
+        "name": "com.qujindai.localvideo.UiStatePolicyTest",
+        "tests": 4
+      },
+      {
+        "name": "com.qujindai.localvideo.Yuv420FrameTest",
+        "tests": 3
+      },
+      {
+        "name": "com.qujindai.localvideo.Yuv420PlaneWriterTest",
+        "tests": 2
+      }
+    ],
+    "face_math_pixel_known_answer_tests": {
+      "passed": 29,
+      "failed": 0
+    },
+    "java_actual_model_contract_report": [
+      "Actual-model fixture 0 PASS faces=1 landmarkMax=0.0 warpRgbMae=0.08258928571428571",
+      "Actual-model fixture 1 PASS faces=6 landmarkMax=0.0 warpRgbMae=0.06722005208333333",
+      "Actual-model identity projection PASS maxAbs=7.450580596923828E-8"
+    ],
+    "host_model_status": "HOST_INFERENCE_PASS_HANDSET_PENDING",
+    "handset_verified": false
+  },
+  "native_libraries": [
+    {
+      "file": "lib/arm64-v8a/libmobilei2v_gpu.so",
+      "sha256": "a984fc56aa21ee46ca1efd1b176fed217f1729757bafc8c36d2e8cf740e3a9ce",
+      "load_segment_alignment": [
+        16384,
+        16384,
+        16384
+      ]
+    },
+    {
+      "file": "lib/arm64-v8a/libonnxruntime.so",
+      "sha256": "3a602b463d434d20fbf69cd1b8bdfd2f86a2cb67d08de97aec8f62476fa4ab87",
+      "load_segment_alignment": [
+        16384,
+        16384,
+        16384
+      ]
+    },
+    {
+      "file": "lib/arm64-v8a/libonnxruntime4j_jni.so",
+      "sha256": "45673d7fba377fe0555892460766051b5993d65c9f65e528dc9d515c07c9f683",
+      "load_segment_alignment": [
+        16384,
+        16384
+      ]
+    },
+    {
+      "file": "lib/arm64-v8a/librife.so",
+      "sha256": "cb728171cd33ca2d5f6f822daf5edd45e4e3ada5df7fa9910f045ed359d872e4",
+      "load_segment_alignment": [
+        16384,
+        16384,
+        16384
+      ]
+    }
+  ],
+  "first_face_model_download_bytes": 732986691,
+  "scope": {
+    "photo_face_swap": true,
+    "exactly_one_face_per_input": true,
+    "photo_save_share_history": true,
+    "existing_video_workbench_retained": true,
+    "free_prompt_scene_generation": false,
+    "video_face_swap": false,
+    "mobilei2v_handset_inference_verified": false
+  },
+  "pending_handset_acceptance": [
+    "overwrite install and retained history/model files",
+    "model download cancellation/resume",
+    "visual face identity and blending",
+    "repeated runs and cancellation",
+    "save/share/relaunch history",
+    "S24U latency memory and heat"
+  ]
+}
