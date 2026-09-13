@@ -1,41 +1,22 @@
-# Third-party notices
+# Third-party notices — Face-RE V0.9
 
-Local Video Lab combines or interoperates with third-party components. This file documents the V0.5 development baseline and keeps code/model licensing boundaries explicit.
+The V0.9 APK is a single-purpose local static face-replacement application. Legacy RIFE, Depth Anything and MobileI2V components are not included in this APK build.
 
-## RIFE / ncnn Vulkan baseline
+## Android Face Fusion reference
 
-The built-in handset-validated interpolation runtime is based on the open-source `rife-ncnn-vulkan` / ncnn ecosystem. Its source/runtime provenance remains pinned by the existing runtime preparation script and manifest. Preserve upstream license and attribution terms when redistributing derived binaries.
+Face-RE adapts portions of the Android ONNX face-detection, alignment, ArcFace preprocessing and INSwapper preprocessing/post-processing approach from:
 
-## Depth Anything V2 Small ONNX
+- Project: `Parasaran-Python/android-face-fusion`
+- Pinned reference commit: `d5672622e53a97b04a158440a507126f384964ac`
+- License: MIT License
+- Copyright (c) 2026 Parasaran Vedanarayanan
 
-The V0.5 Depth 3D backend packages the Q4 ONNX export from `onnx-community/depth-anything-v2-small`.
-
-- Model repository: `onnx-community/depth-anything-v2-small`
-- Repository/model-card license: Apache-2.0
-- Packaged artifact: `onnx/model_q4.onnx`
-- Packaged artifact SHA-256: `5d55b02762e1907589158af3e366bd61ddf648155852a07bbf5e3a074639fcf8`
-- Input used by Local Video Lab: RGB ImageNet-normalized float tensor, `1×3×518×518`
-- Output used by Local Video Lab: monocular depth map, normalized locally with robust percentile clipping before parallax synthesis
-
-The model runs through ONNX Runtime Android. Its depth result is used to construct a depth-dependent camera-motion endpoint; RIFE then generates the intermediate video frames. This is a real two-model local pipeline, but it is not described as semantic diffusion I2V.
-
-An INT8 export from the same repository was evaluated during V0.5 development and rejected because its `ConvInteger` graph was not executable on the standard ONNX Runtime CPU path used by the app. It is not packaged in the final V0.5 APK.
-
-## MobileI2V
-
-- Source: `hustvl/MobileI2V`
-- V0.5 pinned source commit: `8d0a253c766b05a43ba408baf5e8f800a36be8b4`
-- Repository source license: Apache License 2.0 (`LICENSE.txt` in the upstream repository)
-- Public checkpoint baseline: `hybrid_371.pth`
-- Checkpoint SHA-256: `bc6a545302b342b87d83a4d78e9b74d47ca59fbf908fd8e13d9ecedbe1a37f2d`
-- Hugging Face model-card license field at the V0.5 baseline: MIT
-
-MobileI2V weights are **not** embedded in the APK. Exported/compiled artifacts are installed as a separate `.mlvpkg`, whose manifest records source identity, code/weights license metadata, and per-file SHA-256 values. The app does not report MobileI2V as ready until a genuine Android execution loop is implemented and passes its readiness gates.
+The MIT license permits use, modification and distribution subject to preservation of the copyright and permission notice. Face-RE uses its own model import, fail-closed behavior, UI, result publishing and application structure.
 
 ## ONNX Runtime Android
 
-V0.5 packages `com.microsoft.onnxruntime:onnxruntime-android:1.29.0`. It is actively used by the Depth Anything V2 backend and also serves as the generic execution foundation for future semantic I2V graph work. ONNX Runtime is distributed under the MIT License.
+Face-RE packages `com.microsoft.onnxruntime:onnxruntime-android:1.29.0`. ONNX Runtime is distributed under the MIT License.
 
-## Model-To-NPU research reference
+## Face model weights
 
-`VitalikDen0/Model-To-NPU` was reviewed as an architectural reference for Snapdragon/QNN deployment patterns. Its repository identifies PolyForm Noncommercial License 1.0.0. No source from that repository is copied into Local Video Lab; this project keeps its implementation independent.
+No SCRFD, ArcFace or INSwapper production model weights are committed to this repository or bundled in the APK. The user imports compatible model files separately. Model-weight usage and redistribution rights are separate from this application's source-code licenses; users are responsible for using model weights under terms that permit their intended use.
