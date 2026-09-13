@@ -53,6 +53,10 @@ jobs:
           grep "versionCode='11'" apk-badging.txt
           grep "versionName='0.9.0'" apk-badging.txt
           grep "launchable-activity: name='com.qujindai.facere.FaceReMainActivity'" apk-badging.txt
+          if grep -Eq "android.permission.(INTERNET|ACCESS_NETWORK_STATE)" apk-badging.txt; then
+            echo 'Face-RE must remain fully offline: network permission found' >&2
+            exit 1
+          fi
           unzip -l "$APK" | grep 'lib/arm64-v8a/libonnxruntime.so'
           unzip -l "$APK" | grep 'lib/arm64-v8a/libonnxruntime4j_jni.so'
           if unzip -l "$APK" | grep -Eiq 'librife|mobilei2v|depth-anything|flownet|assets/.*\.onnx'; then
