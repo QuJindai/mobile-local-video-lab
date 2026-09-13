@@ -1,0 +1,76 @@
+name: Face-RE Static APK
+
+on:
+  push:
+    branches:
+      - feat/v090-face-re
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 35
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Run Face-RE JVM tests
+        run: gradle :facere:testDebugUnitTest --stacktrace
+
+      - name: Assemble Face-RE APK
+        run: gradle :facere:assembleDebug --stacktrace
+
+      - name: Verify static-only APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=facere/build/outputs/apk/debug/facere-debug.apk
+          test -s "$APK"
+          "$ANDROID_SDK_ROOT/build-tools/35.0.0/aapt" dump badging "$APK" | tee apk-badging.txt
+          grep "versionCode='11'" apk-badging.txt
+          grep "versionName='0.9.0'" apk-badging.txt
+          grep "launchable-activity: name='com.qujindai.facere.FaceReMainActivity'" apk-badging.txt
+          unzip -l "$APK" | grep 'lib/arm64-v8a/libonnxruntime.so'
+          unzip -l "$APK" | grep 'lib/arm64-v8a/libonnxruntime4j_jni.so'
+          if unzip -l "$APK" | grep -Eiq 'librife|mobilei2v|depth-anything|flownet|assets/.*\.onnx'; then
+            echo 'forbidden legacy/model payload found in Face-RE APK' >&2
+            exit 1
+          fi
+          "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee apk-signing.txt
+          grep -qi 'c9329387060f0259870e30b7bca6b9d9684ed86de716676962a1e75ef7f346ac' apk-signing.txt
+          sha256sum "$APK" | tee apk-sha256.txt
+
+      - name: Upload Face-RE APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: face-re-v0.9.0-static-apk
+          path: |
+            facere/build/outputs/apk/debug/facere-debug.apk
+            apk-badging.txt
+            apk-signing.txt
+            apk-sha256.txt
+          if-no-files-found: error
+          retention-days: 30
