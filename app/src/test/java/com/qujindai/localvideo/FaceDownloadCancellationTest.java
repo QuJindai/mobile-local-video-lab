@@ -48,14 +48,15 @@ public class FaceDownloadCancellationTest {
 
     @Test public void cancellationBeforeConnectStillDisconnectsAfterConnect() throws Exception {
         CountDownLatch firstDisconnect=new CountDownLatch(1),afterConnect=new CountDownLatch(1);
-        AtomicBoolean connected=new AtomicBoolean();
+        AtomicBoolean connectionStarted=new AtomicBoolean();
         HttpURLConnection connection=new HttpURLConnection(new URL("https://example.invalid/model")) {
             @Override public void disconnect(){
+                boolean wasConnected=connectionStarted.get();
                 firstDisconnect.countDown();
-                if(connected.get())afterConnect.countDown();
+                if(wasConnected)afterConnect.countDown();
             }
             @Override public boolean usingProxy(){return false;}
-            @Override public void connect(){connected.set(true);}
+            @Override public void connect(){connectionStarted.set(true);}
         };
         try(FaceDownloadCancellation monitor=new FaceDownloadCancellation(connection,new AtomicBoolean(true))) {
             assertTrue(firstDisconnect.await(1,TimeUnit.SECONDS));
