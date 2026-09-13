@@ -39,3 +39,28 @@ V0.5 packages `com.microsoft.onnxruntime:onnxruntime-android:1.29.0`. It is acti
 ## Model-To-NPU research reference
 
 `VitalikDen0/Model-To-NPU` was reviewed as an architectural reference for Snapdragon/QNN deployment patterns. Its repository identifies PolyForm Noncommercial License 1.0.0. No source from that repository is copied into Local Video Lab; this project keeps its implementation independent.
+# FACE-RE photo identity pipeline (V0.9)
+
+The photo pipeline uses the InsightFace SCRFD 2.5G detector, ArcFace W600K R50
+identity encoder and INSwapper 128 FP32 model. Model files are retrieved by the
+user's app from the FaceFusion project's `facefusion-assets` release
+`models-3.0.0`; exact file sizes and SHA-256 values are in
+`app/src/main/assets/models/face-swap/models.json`. The identity projection is
+extracted from the pinned INSwapper model during CI and verified separately.
+
+InsightFace source is MIT licensed; its published pretrained models are for
+non-commercial research. These are distinct terms, and an MIT source license
+does not grant broader rights to model weights or their training data.
+This laboratory APK is a non-commercial research/test build.
+
+Algorithm reference: `deepinsight/insightface` commit
+`1480e705287bc5d59f923b46c260ec6e3e4150f6`, specifically
+`python-package/insightface/model_zoo/{scrfd,arcface_onnx,inswapper}.py`
+and `python-package/insightface/utils/face_align.py`.
+The Android math and pixel implementations are written for this repository;
+FaceFusion application code is not incorporated.
+
+The host qualification uses two test images shipped with that pinned
+InsightFace source. Those fixture images are not distributed inside the APK.
+Host identity comparisons are engineering measurements for the fixtures,
+not a general biometric accuracy guarantee.

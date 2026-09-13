@@ -1,4 +1,4 @@
-> V0.8.1 实机反馈修正：[视频核验与界面修复](docs/V0.8.1_HANDSET_FEEDBACK.md)。上传样片确认 64 帧 / 8 秒往返序列；修正滚动内容遮挡系统栏。[V0.8 运镜功能](docs/V0.8.0_HANDSET_TEST.md)全部保留。MobileI2V 完整模型包及出片验收尚未完成。
+> V0.9.0 FACE-RE 照片换脸候选版：参考人脸＋目标照片，经 SCRFD / ArcFace / INSwapper 本机处理后保存结果。真实模型 host 推理已通过，Android 与实机验收分开记录。见 [实现说明](docs/FACE_RE_PHOTO_IMPLEMENTATION.md) 与 [手机测试范围](docs/FACE_RE_PHOTO_HANDSET.md)。原视频功能保留。
 
 # Mobile Local Video Lab
 
@@ -11,12 +11,18 @@ identity-preserving portrait creation is the main feature**. The delivered
 V0.8.1 APK has no face-swap or identity-conditioning pipeline. Its RIFE/Depth
 motion features and successful video tests do not establish FACE-RE completion.
 
-Continue development on `feat/face-re-mainline` in this public repository. The
-next implementation must connect an actual identity model to a reference photo
-and produce a saved, verifiable face result. The recovered requirements, source
-locations, missing implementation and acceptance sequence are recorded in
-[FACE-RE mainline status](docs/FACE_RE_MAINLINE.md). This correction records scope
-and status; it does not add a working face model or a new APK.
+Development continues on `feat/face-re-mainline` in this public repository.
+V0.9 adds a separate photo-swap entry, verified/resumable model download,
+five-point alignment, identity projection, real FP32 ONNX execution, feathered
+compositing, image save/share/history and task cancellation. Each selected
+photo must contain exactly one usable face. The initial download is 699 MiB;
+the APK carries the pinned manifest and identity projection. The existing
+video workbench remains accessible from the photo entry.
+
+The original V0.8.1 scope audit is preserved in
+[FACE-RE mainline status](docs/FACE_RE_MAINLINE.md). Host qualification proves
+actual model execution and identity input influence on the test fixture;
+handset performance, visual quality and repeated-use acceptance remain separate.
 
 ## Secondary track: MobileI2V integration
 

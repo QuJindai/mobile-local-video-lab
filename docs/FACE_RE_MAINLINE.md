@@ -1,5 +1,9 @@
 # FACE-RE 换脸／保脸主线状态
 
+> 2026-09-13 更新：主线已进入 [V0.9 照片换脸实现](FACE_RE_PHOTO_IMPLEMENTATION.md)，
+> 三模型真实 host 推理通过；[手机验收范围](FACE_RE_PHOTO_HANDSET.md)单独记录。
+> 下文保留 2026-09-12 对 V0.8.1 的历史核验，不代表 V0.9 的实现清单。
+
 核验日期：2026-09-12。当前工作仓：`QuJindai/mobile-local-video-lab`。
 开发分支：`feat/face-re-mainline`，从已交付 V0.8.1 的证据提交
 `f653fb5f8e71830a5d819532c347949c4d2ee9c7` 继续；`main` 保持现状。

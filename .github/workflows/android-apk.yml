@@ -9,6 +9,7 @@ on:
       - main
       - feat/v071-handset-test
       - feat/v080-motion-studio
+      - feat/face-re-mainline
   workflow_dispatch:
 
 permissions:
@@ -131,6 +132,14 @@ jobs:
           print('Depth Anything V2 Q4 host smoke PASS')
           PY
 
+      - name: Verify real FACE-RE models and prepare identity projection
+        shell: bash
+        run: |
+          python3 -m pip install --disable-pip-version-check --quiet 'numpy==2.2.6' 'onnx==1.18.0' 'opencv-python-headless==4.12.0.88'
+          python3 tools/face/qualify_models.py --lock app/src/main/assets/models/face-swap/models.json
+          cp build/face-qualification/emap.bin app/src/main/assets/models/face-swap/emap.bin
+          cmp build/face-qualification/models.json app/src/main/assets/models/face-swap/models.json
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
@@ -163,6 +172,18 @@ jobs:
 
       - name: Run JVM unit tests
         run: gradle :app:testDebugUnitTest --stacktrace
+
+      - name: Test FACE-RE geometry, projection, detector and pixels
+        shell: bash
+        run: |
+          mkdir -p /tmp/face-re-tests
+          javac -d /tmp/face-re-tests \
+            app/src/main/java/com/qujindai/localvideo/FaceSwapMath.java \
+            app/src/main/java/com/qujindai/localvideo/FaceSwapPixels.java \
+            tools/face/FaceSwapCoreTest.java \
+            tools/face/FaceSwapModelContractTest.java
+          java -cp /tmp/face-re-tests com.qujindai.localvideo.FaceSwapCoreTest
+          java -cp /tmp/face-re-tests com.qujindai.localvideo.FaceSwapModelContractTest build/face-qualification | tee face-core-model-parity.txt
 
       - name: Build Dream-derived MobileI2V MNN OpenCL runtime
         shell: bash
@@ -212,7 +233,7 @@ jobs:
       - name: Assemble debug APK
         run: gradle :app:assembleDebug --stacktrace
 
-      - name: Verify V0.8.1 APK runtime, models, launcher and signing
+      - name: Verify V0.9.0 FACE-RE APK runtime, models, launcher and signing
         shell: bash
         run: |
           set -euo pipefail
@@ -224,13 +245,17 @@ jobs:
           unzip -l "$APK" | grep 'assets/models/depth-anything-v2/model_q4.onnx'
           unzip -l "$APK" | grep 'lib/arm64-v8a/libonnxruntime.so'
           unzip -l "$APK" | grep 'lib/arm64-v8a/libonnxruntime4j_jni.so'
+          unzip -p "$APK" assets/models/face-swap/models.json > /tmp/face-models.json
+          cmp /tmp/face-models.json app/src/main/assets/models/face-swap/models.json
+          test "$(unzip -p "$APK" assets/models/face-swap/emap.bin | sha256sum | awk '{print $1}')" \
+            = '370af5bf707dafdbea8a40448d697d9697610bd223ecf92887af9c9cc7055ac8'
           test "$(unzip -p "$APK" assets/models/depth-anything-v2/model_q4.onnx | sha256sum | awk '{print $1}')" \
             = '5d55b02762e1907589158af3e366bd61ddf648155852a07bbf5e3a074639fcf8'
 
           "$ANDROID_SDK_ROOT/build-tools/35.0.0/aapt" dump badging "$APK" | tee apk-badging.txt
-          grep "versionCode='10'" apk-badging.txt
-          grep "versionName='0.8.1'" apk-badging.txt
-          grep "launchable-activity: name='com.qujindai.localvideo.MainActivityV05'" apk-badging.txt
+          grep "versionCode='11'" apk-badging.txt
+          grep "versionName='0.9.0'" apk-badging.txt
+          grep "launchable-activity: name='com.qujindai.localvideo.FaceSwapActivity'" apk-badging.txt
 
           "$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee apk-signing.txt
           grep -qi 'c9329387060f0259870e30b7bca6b9d9684ed86de716676962a1e75ef7f346ac' apk-signing.txt
@@ -268,7 +293,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: v0.8.1-jvm-test-results
+          name: v0.9.0-jvm-test-results
           path: app/build/test-results/testDebugUnitTest/
           if-no-files-found: warn
           retention-days: 30
@@ -276,7 +301,7 @@ jobs:
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: mobile-local-video-v0.8.1-handset-test-apk
+          name: face-re-v0.9.0-handset-test-apk
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             apk-sha256.txt
@@ -285,5 +310,8 @@ jobs:
             build-source.txt
             app/src/main/assets/runtime/runtime-manifest.txt
             tools/mobilei2v/upstream.lock.properties
+            build/face-qualification/qualification.json
+            app/src/main/assets/models/face-swap/models.json
+            face-core-model-parity.txt
           if-no-files-found: error
           retention-days: 30

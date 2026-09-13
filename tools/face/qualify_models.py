@@ -86,13 +86,20 @@ def align(rgb, landmarks, size):
     return cv2.warpAffine(rgb, mat, (size,size), flags=cv2.INTER_LINEAR), mat
 
 
-def detect(s, rgb):
+def detect(s, rgb, fixture_dir=None):
     h,w = rgb.shape[:2]
     scale = min(640/w,640/h,1.)
     rw,rh = max(1,round(w*scale)),max(1,round(h*scale))
     padded = np.zeros((640,640,3),np.uint8)
     padded[:rh,:rw] = cv2.resize(rgb,(rw,rh))
     out = s.run(None, {s.get_inputs()[0].name:tensor(padded,127.5,128.)})
+    if fixture_dir:
+        fixture_dir.mkdir(parents=True,exist_ok=True)
+        for i,values in enumerate(out):
+            values.astype('<f4').tofile(fixture_dir/f'detector-{i}.f32')
+        np.array([w,h,rw,rh],dtype='<i4').tofile(fixture_dir/'dimensions.i32')
+        argb=(np.uint32(255)<<24)|(rgb[:,:,0].astype(np.uint32)<<16)|(rgb[:,:,1].astype(np.uint32)<<8)|rgb[:,:,2].astype(np.uint32)
+        argb.astype('<u4').tofile(fixture_dir/'image.argb')
     assert len(out)==9, [x.shape for x in out]
     faces = []
     for i,stride in enumerate((8,16,32)):
@@ -130,18 +137,24 @@ def normalized(x):
     return x/np.linalg.norm(x)
 
 
-def qualify(directory, output):
+def qualify(directory, output, lock_path=None):
     output.mkdir(parents=True,exist_ok=True)
+    lock=json.loads(lock_path.read_text()) if lock_path else None
+    locked_models={m['name']:m for m in lock['models']} if lock else {}
     entries=[]
     for name,size in CATALOG.items():
         path=directory/name
         download(RELEASE+name,path,size)
         entry={"name":name,"url":RELEASE+name,"bytes":size,"sha256":sha(path)}
+        if lock:
+            assert entry==locked_models[name],('pinned model identity mismatch',name)
         entries.append(entry)
         print(json.dumps(entry),flush=True)
     emap=np.asarray(numpy_helper.to_array(onnx.load(directory/'inswapper_128.onnx').graph.initializer[-1]),dtype='<f4')
     assert emap.shape==(512,512) and np.isfinite(emap).all()
     emap.tofile(output/'emap.bin')
+    if lock:
+        assert sha(output/'emap.bin')==lock['emap_sha256'],'identity projection mismatch'
     fixtures=[]
     for name,size,git_sha in [('Tom_Hanks_54745.png',12123,'906315d13fa29bb3a5ded3e162592f2c7f041b23'),
                               ('t1.jpg',128824,'0d1d64a59675c9590fd12429db647eb169cecff8')]:
@@ -156,15 +169,23 @@ def qualify(directory, output):
             "handset_verified":False,"models":entries,"io":{},"stages":{}}
     det=session(directory/'scrfd_2.5g.onnx')
     report['io']['detector']=io_info(det)
-    faces=[detect(det,im) for im in fixtures]
+    faces=[detect(det,im,output/'contract'/str(i)) for i,im in enumerate(fixtures)]
     report['stages']['detected_faces']=[len(x) for x in faces]
     del det;gc.collect()
     aligned=[align(im,f[0][2],112)[0] for im,f in zip(fixtures,faces)]
+    for i,(im,found) in enumerate(zip(fixtures,faces)):
+        found[0][2].astype('<f4').tofile(output/'contract'/str(i)/'landmarks.f32')
+        size=112 if i==0 else 128
+        crop,mat=align(im,found[0][2],size)
+        mat.astype('<f8').tofile(output/'contract'/str(i)/'affine.f64')
+        ((np.uint32(255)<<24)|(crop[:,:,0].astype(np.uint32)<<16)|(crop[:,:,1].astype(np.uint32)<<8)|crop[:,:,2].astype(np.uint32)).astype('<u4').tofile(output/'contract'/str(i)/'aligned.argb')
     rec=session(directory/'arcface_w600k_r50.onnx')
     report['io']['recognizer']=io_info(rec)
     embeddings=[rec.run(None,{rec.get_inputs()[0].name:tensor(im,127.5,127.5)})[0].reshape(-1) for im in aligned]
     assert all(x.shape==(512,) and np.isfinite(x).all() for x in embeddings)
     latents=[normalized(normalized(x)@emap).reshape(1,512).astype(np.float32) for x in embeddings]
+    embeddings[0].astype('<f4').tofile(output/'contract'/'embedding.f32')
+    latents[0].astype('<f4').tofile(output/'contract'/'projected.f32')
     del rec;gc.collect()
     target,mat=align(fixtures[1],faces[1][0][2],128)
     swap=session(directory/'inswapper_128.onnx')
@@ -196,6 +217,8 @@ def qualify(directory, output):
     manifest={"schema_version":1,"model_id":"inswapper128-fp32-v1","models":entries,
               "emap_sha256":sha(output/'emap.bin'),"emap_bytes":512*512*4,"io":report['io'],
               "execution":"ONNX Runtime CPU","model_license":"InsightFace pretrained models: non-commercial research"}
+    if lock:
+        assert manifest==lock,'qualified graph contract differs from Android model manifest'
     (output/'models.json').write_text(json.dumps(manifest,indent=2)+'\n')
     print(json.dumps(report,indent=2),flush=True)
 
@@ -204,5 +227,6 @@ if __name__=='__main__':
     p=argparse.ArgumentParser()
     p.add_argument('--directory',type=Path,default=Path('build/face-models'))
     p.add_argument('--output',type=Path,default=Path('build/face-qualification'))
+    p.add_argument('--lock',type=Path)
     args=p.parse_args()
-    qualify(args.directory,args.output)
+    qualify(args.directory,args.output,args.lock)

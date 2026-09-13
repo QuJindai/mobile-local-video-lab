@@ -4,6 +4,11 @@ local.properties
 **/build/
 .deps/
 app/src/main/jniLibs/
-app/src/main/assets/models/
+app/src/main/assets/models/*
+!app/src/main/assets/models/face-swap/
+app/src/main/assets/models/face-swap/*
+!app/src/main/assets/models/face-swap/models.json
 app/src/main/assets/runtime/
 *.iml
+.superpowers/
+__pycache__/

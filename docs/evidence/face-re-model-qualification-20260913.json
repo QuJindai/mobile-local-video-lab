@@ -1,0 +1,193 @@
+{
+  "schema_version": 1,
+  "runtime": "1.23.2",
+  "provider": "CPUExecutionProvider",
+  "upstream_source": "1480e705287bc5d59f923b46c260ec6e3e4150f6",
+  "fixtures": "official InsightFace test images; largest detected face selected for host test",
+  "handset_verified": false,
+  "models": [
+    {
+      "name": "scrfd_2.5g.onnx",
+      "url": "https://github.com/facefusion/facefusion-assets/releases/download/models-3.0.0/scrfd_2.5g.onnx",
+      "bytes": 3295067,
+      "sha256": "2c07342347cef21a619c49dd5664fb8c09570ae9eda5bff3e385c11eafc45ada"
+    },
+    {
+      "name": "arcface_w600k_r50.onnx",
+      "url": "https://github.com/facefusion/facefusion-assets/releases/download/models-3.0.0/arcface_w600k_r50.onnx",
+      "bytes": 174388474,
+      "sha256": "f1f79dc3b0b79a69f94799af1fffebff09fbd78fd96a275fd8f0cbbea23270d1"
+    },
+    {
+      "name": "inswapper_128.onnx",
+      "url": "https://github.com/facefusion/facefusion-assets/releases/download/models-3.0.0/inswapper_128.onnx",
+      "bytes": 555303150,
+      "sha256": "a290273ed497312095dac48cdef20feec9d5208298223dd01288ab202b54bea7"
+    }
+  ],
+  "io": {
+    "detector": {
+      "inputs": [
+        {
+          "name": "input",
+          "shape": [
+            1,
+            3,
+            "?",
+            "?"
+          ],
+          "type": "tensor(float)"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "0",
+          "shape": [
+            "unk__145",
+            1
+          ],
+          "type": "tensor(float)"
+        },
+        {
+          "name": "1",
+          "shape": [
+            "unk__158",
+            1
+          ],
+          "type": "tensor(float)"
+        },
+        {
+          "name": "2",
+          "shape": [
+            "unk__171",
+            1
+          ],
+          "type": "tensor(float)"
+        },
+        {
+          "name": "3",
+          "shape": [
+            "unk__146",
+            4
+          ],
+          "type": "tensor(float)"
+        },
+        {
+          "name": "4",
+          "shape": [
+            "unk__159",
+            4
+          ],
+          "type": "tensor(float)"
+        },
+        {
+          "name": "5",
+          "shape": [
+            "unk__172",
+            4
+          ],
+          "type": "tensor(float)"
+        },
+        {
+          "name": "6",
+          "shape": [
+            "unk__147",
+            10
+          ],
+          "type": "tensor(float)"
+        },
+        {
+          "name": "7",
+          "shape": [
+            "unk__160",
+            10
+          ],
+          "type": "tensor(float)"
+        },
+        {
+          "name": "8",
+          "shape": [
+            "unk__173",
+            10
+          ],
+          "type": "tensor(float)"
+        }
+      ]
+    },
+    "recognizer": {
+      "inputs": [
+        {
+          "name": "input",
+          "shape": [
+            "None",
+            3,
+            112,
+            112
+          ],
+          "type": "tensor(float)"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "shape": [
+            1,
+            512
+          ],
+          "type": "tensor(float)"
+        }
+      ]
+    },
+    "swapper": {
+      "inputs": [
+        {
+          "name": "target",
+          "shape": [
+            1,
+            3,
+            128,
+            128
+          ],
+          "type": "tensor(float)"
+        },
+        {
+          "name": "source",
+          "shape": [
+            1,
+            512
+          ],
+          "type": "tensor(float)"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "shape": [
+            1,
+            3,
+            128,
+            128
+          ],
+          "type": "tensor(float)"
+        }
+      ]
+    }
+  },
+  "stages": {
+    "detected_faces": [
+      1,
+      6
+    ],
+    "swap_seconds": [
+      2.0192799010000044,
+      2.0201446649999752
+    ],
+    "identity_input_mean_absolute_effect": 0.030593780800700188,
+    "source_target_embedding_cosine": -0.041229091584682465,
+    "swapped_crop_std": 0.2666296362876892,
+    "source_result_embedding_cosine": 0.9330527782440186
+  },
+  "status": "HOST_INFERENCE_PASS_HANDSET_PENDING",
+  "github_run_id": 34756721368,
+  "source_commit": "f19b10e598ad8701e38cb9ff22dbd9c945b802dc"
+}
