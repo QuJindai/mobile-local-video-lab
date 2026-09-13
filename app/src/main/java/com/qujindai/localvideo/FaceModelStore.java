@@ -174,7 +174,7 @@ public final class FaceModelStore {
             connection.setInstanceFollowRedirects(true);
             connection.setRequestProperty("Accept-Encoding","identity");
             if(offset>0)connection.setRequestProperty("Range","bytes="+offset+"-");
-            try {
+            try (FaceDownloadCancellation monitor=new FaceDownloadCancellation(connection,cancelled)) {
                 int code=connection.getResponseCode();
                 boolean append=offset>0 && code==206;
                 if(append) {
@@ -199,6 +199,7 @@ public final class FaceModelStore {
                 }
                 publish(partial,file);return;
             } catch(IOException error) {
+                checkCancelled(cancelled);
                 if(attempt==2)throw error;
                 progress.update((int)(completed*90/total),"连接中断，正在续传换脸模型");
             } finally {connection.disconnect();}
