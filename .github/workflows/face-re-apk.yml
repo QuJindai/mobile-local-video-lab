@@ -37,6 +37,25 @@ jobs:
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
+      - name: Verify model download source contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          CATALOG=facere/src/main/java/com/qujindai/facere/FaceModelDownloadCatalog.java
+          DOWNLOADER=facere/src/main/java/com/qujindai/facere/FaceModelDownloader.java
+          UI=facere/src/main/java/com/qujindai/facere/FaceReMainActivity.java
+          grep -q 'https://github.com/deepinsight/insightface/releases/download/model-zoo/buffalo_l.zip' "$CATALOG"
+          grep -q 'https://github.com/deepinsight/insightface/releases/download/model-zoo/inswapper_128.onnx' "$CATALOG"
+          grep -q 'https://hf-mirror.com' "$CATALOG"
+          grep -q '80ffe37d8a5940d59a7384c201a2a38d4741f2f3c51eef46ebb28218a7b0ca2f' "$CATALOG"
+          grep -q '5838f7fe053675b1c7a08b633df49e7af5495cee0493c7dcf6697200b85b5b91' "$CATALOG"
+          grep -q '4c06341c33c2ca1f86781dab0e829f88ad5b64be9fba56e56bc9ebdefc619e43' "$CATALOG"
+          grep -q 'e4a3f08c753cb72d04e10aa0f7dbe3deebbf39567d4ead6dce08e98aa49e16af' "$CATALOG"
+          grep -q 'Range' "$DOWNLOADER"
+          grep -q 'OnnxEmapExtractor.extract' "$DOWNLOADER"
+          grep -q '国内镜像优先' "$UI"
+          grep -q '模型许可与隐私' "$UI"
+
       - name: Run Face-RE JVM tests
         run: gradle :facere:testDebugUnitTest --stacktrace
 
@@ -50,16 +69,18 @@ jobs:
           APK=facere/build/outputs/apk/debug/facere-debug.apk
           test -s "$APK"
           "$ANDROID_SDK_ROOT/build-tools/35.0.0/aapt" dump badging "$APK" | tee apk-badging.txt
-          grep "versionCode='11'" apk-badging.txt
-          grep "versionName='0.9.0'" apk-badging.txt
+          "$ANDROID_SDK_ROOT/build-tools/35.0.0/aapt" dump permissions "$APK" | tee apk-permissions.txt
+          grep "versionCode='12'" apk-badging.txt
+          grep "versionName='0.9.1'" apk-badging.txt
           grep "launchable-activity: name='com.qujindai.facere.FaceReMainActivity'" apk-badging.txt
-          if grep -Eq "android.permission.(INTERNET|ACCESS_NETWORK_STATE)" apk-badging.txt; then
-            echo 'Face-RE must remain fully offline: network permission found' >&2
+          grep -q 'android.permission.INTERNET' apk-permissions.txt
+          if grep -q 'android.permission.ACCESS_NETWORK_STATE' apk-permissions.txt; then
+            echo 'Face-RE model downloader does not require ACCESS_NETWORK_STATE' >&2
             exit 1
           fi
           unzip -l "$APK" | grep 'lib/arm64-v8a/libonnxruntime.so'
           unzip -l "$APK" | grep 'lib/arm64-v8a/libonnxruntime4j_jni.so'
-          if unzip -l "$APK" | grep -Eiq 'librife|mobilei2v|depth-anything|flownet|assets/.*\.onnx'; then
+          if unzip -l "$APK" | grep -Eiq 'librife|mobilei2v|depth-anything|flownet|assets/.*\.onnx|inswapper_128\.onnx|det_10g\.onnx|w600k_r50\.onnx|emap\.bin'; then
             echo 'forbidden legacy/model payload found in Face-RE APK' >&2
             exit 1
           fi
@@ -70,10 +91,11 @@ jobs:
       - name: Upload Face-RE APK
         uses: actions/upload-artifact@v4
         with:
-          name: face-re-v0.9.0-static-apk
+          name: face-re-v0.9.1-static-apk
           path: |
             facere/build/outputs/apk/debug/facere-debug.apk
             apk-badging.txt
+            apk-permissions.txt
             apk-signing.txt
             apk-sha256.txt
           if-no-files-found: error

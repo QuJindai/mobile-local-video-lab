@@ -2,9 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- ONNX Runtime's library manifest declares network permissions. Face-RE is
-         intentionally offline-only, so remove them at manifest merge time. -->
-    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+    <!-- Network is allowed only so the user can explicitly download Face-RE model files.
+         ONNX Runtime also declares ACCESS_NETWORK_STATE; Face-RE does not need it. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
 
     <application

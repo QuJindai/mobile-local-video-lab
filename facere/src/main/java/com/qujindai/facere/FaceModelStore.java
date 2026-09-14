@@ -59,17 +59,55 @@ public final class FaceModelStore {
         return files;
     }
 
+    static File createStaging(Context context, String prefix) throws IOException {
+        File root = storeRoot(context);
+        if (!root.exists() && !root.mkdirs()) throw new IOException("cannot create model store");
+        File staging = new File(root, prefix + "-" + UUID.randomUUID());
+        if (!staging.mkdirs()) throw new IOException("cannot create model staging directory");
+        return staging;
+    }
+
+    static FaceModelFiles activatePrepared(Context context, File staging, Progress progress)
+            throws IOException {
+        if (staging == null || !staging.isDirectory()) throw new IOException("model staging directory missing");
+        File root = storeRoot(context).getCanonicalFile();
+        File canonicalStaging = staging.getCanonicalFile();
+        File parent = canonicalStaging.getParentFile();
+        if (parent == null || !parent.equals(root)) throw new IOException("model staging path is outside store");
+        inspect(canonicalStaging);
+
+        File active = activeRoot(context);
+        File backup = new File(root, "backup-" + UUID.randomUUID());
+        boolean previousMoved = false;
+        boolean activated = false;
+        try {
+            if (active.exists()) {
+                if (!active.renameTo(backup)) throw new IOException("cannot stage previous model pack");
+                previousMoved = true;
+            }
+            if (!canonicalStaging.renameTo(active)) {
+                if (previousMoved) backup.renameTo(active);
+                throw new IOException("cannot activate model pack");
+            }
+            activated = true;
+            deleteRecursively(backup);
+            if (progress != null) progress.onProgress("模型包已安装");
+            return inspect(active);
+        } finally {
+            if (!activated && previousMoved && !active.exists() && backup.exists()) {
+                //noinspection ResultOfMethodCallIgnored
+                backup.renameTo(active);
+            }
+        }
+    }
+
     public static FaceModelFiles importZip(Context context, Uri uri, Progress progress)
             throws IOException {
         if (uri == null) throw new IllegalArgumentException("model zip uri required");
-        File root = storeRoot(context);
-        if (!root.exists() && !root.mkdirs()) throw new IOException("cannot create model store");
-        File staging = new File(root, "staging-" + UUID.randomUUID());
-        if (!staging.mkdirs()) throw new IOException("cannot create model staging directory");
-
+        File staging = createStaging(context, "import-staging");
         Set<String> seen = new HashSet<>();
         long unpacked = 0L;
-        boolean installed = false;
+        boolean activated = false;
         try (InputStream raw = context.getContentResolver().openInputStream(uri)) {
             if (raw == null) throw new IOException("cannot open model zip");
             try (ZipInputStream zip = new ZipInputStream(new BufferedInputStream(raw))) {
@@ -109,32 +147,14 @@ public final class FaceModelStore {
                     zip.closeEntry();
                 }
             }
-        } finally {
             if (!FacePackContract.hasRequired(seen)) {
-                deleteRecursively(staging);
+                throw new IOException("model zip must contain detector, recognizer, swapper and emap");
             }
-        }
-
-        if (!FacePackContract.hasRequired(seen)) {
-            throw new IOException("model zip must contain detector, recognizer, swapper and emap");
-        }
-        FaceModelFiles candidate = inspect(staging);
-        File active = activeRoot(context);
-        File backup = new File(root, "backup-" + UUID.randomUUID());
-        try {
-            if (active.exists() && !active.renameTo(backup)) {
-                throw new IOException("cannot stage previous model pack");
-            }
-            if (!staging.renameTo(active)) {
-                if (backup.exists()) backup.renameTo(active);
-                throw new IOException("cannot activate imported model pack");
-            }
-            deleteRecursively(backup);
-            installed = true;
-            if (progress != null) progress.onProgress("模型包已安装");
-            return inspect(active);
+            FaceModelFiles result = activatePrepared(context, staging, progress);
+            activated = true;
+            return result;
         } finally {
-            if (!installed) deleteRecursively(staging);
+            if (!activated) deleteRecursively(staging);
         }
     }
 

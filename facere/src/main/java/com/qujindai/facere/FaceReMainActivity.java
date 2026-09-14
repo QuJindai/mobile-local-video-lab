@@ -1,21 +1,25 @@
 package com.qujindai.facere;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
-import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
+import android.widget.Spinner;
 import android.widget.TextView;
 
+import java.io.File;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -24,6 +28,8 @@ public final class FaceReMainActivity extends Activity {
     private static final int PICK_MODEL = 100;
     private static final int PICK_SOURCE = 101;
     private static final int PICK_TARGET = 102;
+    private static final String PREFS = "face-re";
+    private static final String PREF_MODEL_LICENSE_ACCEPTED = "insightface-model-license-v1";
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private Uri sourceUri;
@@ -31,14 +37,24 @@ public final class FaceReMainActivity extends Activity {
     private Uri resultUri;
     private Bitmap resultBitmap;
     private boolean busy;
+    private boolean modelDownloading;
+    private boolean modelDownloadPaused;
+    private volatile boolean clearDownloadOnCancel;
+    private FaceModelDownloader.CancelToken modelDownloadToken;
 
     private TextView modelStatus;
     private TextView status;
     private ImageView sourcePreview;
     private ImageView targetPreview;
     private ImageView resultPreview;
+    private Button downloadButton;
+    private Button cancelDownloadButton;
+    private Button importButton;
+    private Button sourceButton;
+    private Button targetButton;
     private Button swapButton;
     private Button shareButton;
+    private Spinner sourceSpinner;
     private ProgressBar progress;
 
     @Override
@@ -60,26 +76,52 @@ public final class FaceReMainActivity extends Activity {
 
         TextView title = text("Face-RE", 30, true);
         root.addView(title);
-        TextView subtitle = text("S24U 本地静态换脸 · ONNX Runtime\n仅保留换脸功能，不包含视频/运镜模型", 14, false);
+        TextView subtitle = text("S24U 本地静态换脸 · ONNX Runtime\n模型可联网下载；图片与人脸特征不上传", 14, false);
         subtitle.setTextColor(0xff5f6368);
         root.addView(subtitle, marginTop(4));
 
         root.addView(section("1  模型"), marginTop(22));
         modelStatus = text("", 14, false);
         root.addView(modelStatus, marginTop(8));
-        Button modelButton = action("导入模型包 ZIP");
-        modelButton.setOnClickListener(v -> pickModel());
-        root.addView(modelButton, marginTop(10));
+
+        TextView sourceTitle = text("下载源", 13, false);
+        sourceTitle.setTextColor(0xff5f6368);
+        root.addView(sourceTitle, marginTop(10));
+        sourceSpinner = new Spinner(this);
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item,
+                new String[]{"自动（国内镜像优先）", "国内镜像", "InsightFace 官方源"});
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        sourceSpinner.setAdapter(adapter);
+        sourceSpinner.setSelection(0);
+        root.addView(sourceSpinner, marginTop(4));
+
+        downloadButton = action("一键下载模型");
+        downloadButton.setOnClickListener(v -> startOrPauseModelDownload());
+        root.addView(downloadButton, marginTop(8));
+
+        cancelDownloadButton = action("取消并清理下载缓存");
+        cancelDownloadButton.setOnClickListener(v -> cancelAndClearModelDownload());
+        cancelDownloadButton.setVisibility(View.GONE);
+        root.addView(cancelDownloadButton, marginTop(6));
+
+        importButton = action("导入模型包 ZIP");
+        importButton.setOnClickListener(v -> pickModel());
+        root.addView(importButton, marginTop(6));
+
+        TextView license = text("自动下载使用 InsightFace 官方发布或国内镜像传输，并按固定 SHA-256 验真。模型权重受独立许可约束。", 12, false);
+        license.setTextColor(0xff5f6368);
+        root.addView(license, marginTop(6));
 
         root.addView(section("2  源人脸"), marginTop(22));
-        Button sourceButton = action("选择源人脸图片");
+        sourceButton = action("选择源人脸图片");
         sourceButton.setOnClickListener(v -> pickImage(PICK_SOURCE));
         root.addView(sourceButton, marginTop(8));
         sourcePreview = preview();
         root.addView(sourcePreview, previewParams());
 
         root.addView(section("3  目标图片"), marginTop(22));
-        Button targetButton = action("选择目标图片");
+        targetButton = action("选择目标图片");
         targetButton.setOnClickListener(v -> pickImage(PICK_TARGET));
         root.addView(targetButton, marginTop(8));
         targetPreview = preview();
@@ -108,7 +150,117 @@ public final class FaceReMainActivity extends Activity {
         return scroll;
     }
 
+    private void startOrPauseModelDownload() {
+        if (modelDownloading) {
+            if (modelDownloadToken != null) modelDownloadToken.cancel();
+            downloadButton.setEnabled(false);
+            status.setText("正在暂停下载…已完成的分片会保留");
+            return;
+        }
+        if (busy) return;
+        SharedPreferences preferences = getSharedPreferences(PREFS, MODE_PRIVATE);
+        if (!preferences.getBoolean(PREF_MODEL_LICENSE_ACCEPTED, false)) {
+            new AlertDialog.Builder(this)
+                    .setTitle("模型许可与隐私")
+                    .setMessage("将按你的操作从 InsightFace 官方发布或国内镜像下载预训练模型。InsightFace 说明其预训练模型默认仅限非商业研究用途，商业使用需另行取得相应许可。国内镜像仅作传输加速，文件会按固定 SHA-256 校验。Face-RE 不上传源图片、目标图片或人脸 embedding。")
+                    .setNegativeButton("取消", null)
+                    .setPositiveButton("同意并下载", (dialog, which) -> {
+                        preferences.edit().putBoolean(PREF_MODEL_LICENSE_ACCEPTED, true).apply();
+                        beginModelDownload();
+                    })
+                    .show();
+            return;
+        }
+        beginModelDownload();
+    }
+
+    private void beginModelDownload() {
+        if (busy || modelDownloading) return;
+        final FaceModelDownloadCatalog.SourceMode mode = selectedSourceMode();
+        modelDownloadToken = new FaceModelDownloader.CancelToken();
+        clearDownloadOnCancel = false;
+        modelDownloading = true;
+        modelDownloadPaused = false;
+        progress.setProgress(0);
+        setBusy(true, "准备下载模型…");
+        refreshActions();
+        worker.submit(() -> {
+            try {
+                FaceModelFiles files = FaceModelDownloader.downloadAndInstall(this, mode, modelDownloadToken,
+                        (percent, message, downloaded, total, bps, source) -> runOnUiThread(() -> {
+                            progress.setProgress(Math.max(0, Math.min(100, percent)));
+                            String speed = bps > 0L
+                                    ? String.format(Locale.US, " · %.1f MB/s", bps / 1048576.0)
+                                    : "";
+                            status.setText(percent + "% · " + message + speed);
+                        }));
+                runOnUiThread(() -> {
+                    modelDownloading = false;
+                    modelDownloadPaused = false;
+                    modelDownloadToken = null;
+                    progress.setProgress(100);
+                    setBusy(false, String.format(Locale.US,
+                            "模型下载并安装完成 · %.1f MB · READY", files.totalBytes() / 1048576.0));
+                    refreshModelStatus();
+                });
+            } catch (FaceModelDownloader.CancelledException paused) {
+                boolean clear = clearDownloadOnCancel;
+                if (clear) clearDownloadCache();
+                runOnUiThread(() -> {
+                    modelDownloading = false;
+                    modelDownloadPaused = !clear;
+                    modelDownloadToken = null;
+                    clearDownloadOnCancel = false;
+                    setBusy(false, clear ? "下载已取消，缓存已清理" : "下载已暂停 · 点击继续可断点续传");
+                    refreshActions();
+                });
+            } catch (Throwable error) {
+                runOnUiThread(() -> {
+                    modelDownloading = false;
+                    modelDownloadPaused = true;
+                    modelDownloadToken = null;
+                    setBusy(false, "模型下载失败 · " + message(error) + " · 可点击继续重试");
+                    refreshActions();
+                });
+            }
+        });
+    }
+
+    private void cancelAndClearModelDownload() {
+        if (modelDownloading) {
+            clearDownloadOnCancel = true;
+            if (modelDownloadToken != null) modelDownloadToken.cancel();
+            cancelDownloadButton.setEnabled(false);
+            downloadButton.setEnabled(false);
+            status.setText("正在取消并清理下载缓存…");
+            return;
+        }
+        if (!modelDownloadPaused || busy) return;
+        setBusy(true, "正在清理下载缓存…");
+        worker.submit(() -> {
+            clearDownloadCache();
+            runOnUiThread(() -> {
+                modelDownloadPaused = false;
+                progress.setProgress(0);
+                setBusy(false, "下载缓存已清理");
+                refreshActions();
+            });
+        });
+    }
+
+    private void clearDownloadCache() {
+        FaceModelStore.deleteRecursively(new File(getFilesDir(), "face-re-downloads"));
+    }
+
+    private FaceModelDownloadCatalog.SourceMode selectedSourceMode() {
+        int position = sourceSpinner == null ? 0 : sourceSpinner.getSelectedItemPosition();
+        if (position == 1) return FaceModelDownloadCatalog.SourceMode.CHINA_MIRROR;
+        if (position == 2) return FaceModelDownloadCatalog.SourceMode.OFFICIAL;
+        return FaceModelDownloadCatalog.SourceMode.AUTO;
+    }
+
     private void pickModel() {
+        if (busy) return;
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("*/*");
@@ -119,6 +271,7 @@ public final class FaceReMainActivity extends Activity {
     }
 
     private void pickImage(int requestCode) {
+        if (busy) return;
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("image/*");
@@ -229,10 +382,11 @@ public final class FaceReMainActivity extends Activity {
     private void refreshModelStatus() {
         FaceModelFiles files = FaceModelStore.active(this);
         if (files == null) {
-            modelStatus.setText("NOT READY · 请导入 det_10g.onnx + w600k_r50.onnx + inswapper_128.onnx + emap.bin 的 ZIP");
+            modelStatus.setText("NOT READY · 可一键下载（国内镜像优先）或导入完整模型 ZIP");
             modelStatus.setTextColor(0xffa33a00);
         } else {
-            modelStatus.setText(String.format(Locale.US, "READY · 本地模型 %.1f MB · 权重不随 APK 分发",
+            modelStatus.setText(String.format(Locale.US,
+                    "READY · 本地模型 %.1f MB · 推理全本地，图片/embedding 不上传",
                     files.totalBytes() / 1048576.0));
             modelStatus.setTextColor(0xff137333);
         }
@@ -246,9 +400,30 @@ public final class FaceReMainActivity extends Activity {
     }
 
     private void refreshActions() {
-        if (swapButton == null || shareButton == null) return;
-        swapButton.setEnabled(!busy && sourceUri != null && targetUri != null && FaceModelStore.active(this) != null);
+        if (swapButton == null || shareButton == null || downloadButton == null) return;
+        FaceModelFiles files = FaceModelStore.active(this);
+        swapButton.setEnabled(!busy && sourceUri != null && targetUri != null && files != null);
         shareButton.setEnabled(!busy && resultUri != null);
+        importButton.setEnabled(!busy);
+        sourceButton.setEnabled(!busy);
+        targetButton.setEnabled(!busy);
+        sourceSpinner.setEnabled(!busy);
+
+        if (modelDownloading) {
+            downloadButton.setText("暂停下载");
+            downloadButton.setEnabled(true);
+            cancelDownloadButton.setVisibility(View.VISIBLE);
+            cancelDownloadButton.setEnabled(true);
+        } else if (modelDownloadPaused) {
+            downloadButton.setText("继续下载模型");
+            downloadButton.setEnabled(!busy);
+            cancelDownloadButton.setVisibility(View.VISIBLE);
+            cancelDownloadButton.setEnabled(!busy);
+        } else {
+            downloadButton.setText(files == null ? "一键下载模型" : "重新下载模型");
+            downloadButton.setEnabled(!busy);
+            cancelDownloadButton.setVisibility(View.GONE);
+        }
     }
 
     private TextView section(String value) {
@@ -306,6 +481,7 @@ public final class FaceReMainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (modelDownloadToken != null) modelDownloadToken.cancel();
         worker.shutdownNow();
         if (resultBitmap != null && !resultBitmap.isRecycled()) resultBitmap.recycle();
         super.onDestroy();
